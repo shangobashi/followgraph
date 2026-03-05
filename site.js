@@ -1,4 +1,4 @@
-﻿const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 document.addEventListener("DOMContentLoaded", () => {
   initPointerGlow();
@@ -48,7 +48,7 @@ function initAnimations() {
     )
     .from(".lede", { y: 28, autoAlpha: 0, duration: 0.8 }, "-=0.58")
     .from(".actions > *", { y: 24, autoAlpha: 0, stagger: 0.12, duration: 0.65 }, "-=0.5")
-    .from(".trust-row span", { y: 18, autoAlpha: 0, stagger: 0.08, duration: 0.5 }, "-=0.42")
+    .from(".trust-row span", { y: 12, autoAlpha: 0, stagger: 0.08, duration: 0.42 }, "-=0.38")
     .from(".scan-surface", { y: 36, autoAlpha: 0, rotateX: 8, duration: 1 }, "-=0.82")
     .from(".float-note", { scale: 0.88, autoAlpha: 0, stagger: 0.1, duration: 0.6 }, "-=0.58");
 
@@ -105,20 +105,16 @@ function initAnimations() {
     ease: "sine.inOut"
   });
 
-  gsap.to(".trust-row span", {
-    x: 2.4,
-    backgroundColor: "rgba(255, 255, 255, 0.062)",
-    borderColor: "rgba(124, 242, 211, 0.22)",
-    boxShadow: "0 8px 20px rgba(120, 166, 255, 0.06), inset 0 0 0 1px rgba(255, 255, 255, 0.03)",
-    opacity: 1,
-    duration: 2.8,
-    stagger: {
-      each: 0.12,
-      from: "random",
+  gsap.utils.toArray(".trust-row span").forEach((pill, index) => {
+    const amplitude = index % 2 === 0 ? 6 : -6;
+
+    gsap.to(pill, {
+      x: amplitude,
+      duration: 4.8 + index * 0.22,
       repeat: -1,
-      yoyo: true
-    },
-    ease: "sine.inOut"
+      yoyo: true,
+      ease: "sine.inOut"
+    });
   });
 
   gsap.to(".scan-track span", {
@@ -371,6 +367,3 @@ function initConstellation() {
   resize();
   draw();
 }
-
-
-
