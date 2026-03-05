@@ -64,6 +64,12 @@ function buildUnfollowQueue(users: ClassifiedUser[], usernames: string[], limit:
   );
 }
 
+function resolveEnrichmentLimit(requestedLimit: number | undefined, totalUsers: number) {
+  const parsed = typeof requestedLimit === "number" && Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 0;
+  if (parsed <= 0) return Math.max(totalUsers, 1);
+  return clamp(parsed, 1, Math.max(totalUsers, 1));
+}
+
 async function ensureHelperTab() {
   const tab = await chrome.tabs.create({ url: "about:blank", active: false });
   if (!tab?.id) throw new Error("Could not create helper tab.");
@@ -272,7 +278,7 @@ async function processJob(job: JobState) {
   await advanceJob(processing, unfollowResult.status, unfollowResult.note);
 }
 
-async function startEnrichment(limit: number) {
+async function startEnrichment(limit?: number) {
   const existing = await loadJobState();
   if (existing?.status === "running") {
     return { ok: false, message: "A job is already running." };
@@ -283,7 +289,8 @@ async function startEnrichment(limit: number) {
     return { ok: false, message: "Run a following scan first." };
   }
 
-  const queue = buildEnrichmentQueue(last.users, clamp(limit || 100, 1, 250));
+  const effectiveLimit = resolveEnrichmentLimit(limit, last.users.length);
+  const queue = buildEnrichmentQueue(last.users, effectiveLimit);
   if (queue.length === 0) {
     return { ok: false, message: "No profiles require enrichment." };
   }
@@ -313,7 +320,13 @@ async function startEnrichment(limit: number) {
 
   await saveJobState(job);
   await navigateHelperTab(helperTabId, currentUser.profileUrl);
-  return { ok: true, message: `Enriching ${queue.length} profiles in a helper tab.` };
+  return {
+    ok: true,
+    message:
+      effectiveLimit >= last.users.length
+        ? `Resolving activity for all ${queue.length} accounts in a helper tab.`
+        : `Resolving activity for ${queue.length} accounts in a helper tab.`
+  };
 }
 
 async function startUnfollow(usernames: string[], limit: number) {
@@ -385,7 +398,7 @@ chrome.runtime.onMessage.addListener(
     const handle = async () => {
       switch (msg.action) {
         case "FOLLOWGRAPH_START_ENRICHMENT":
-          return startEnrichment(msg.limit || 100);
+          return startEnrichment(msg.limit);
         case "FOLLOWGRAPH_START_UNFOLLOW":
           return startUnfollow(msg.usernames || [], msg.limit || 25);
         case "FOLLOWGRAPH_CANCEL_JOB":

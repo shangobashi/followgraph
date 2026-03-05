@@ -2,30 +2,12 @@ import type { ClassifiedUser, Progress, ScanSummary, StopReason } from "./types"
 import { downloadCsv, downloadJson, toCSV } from "./exporter";
 
 const PANEL_ID = "followgraph-root";
-const VERSION = "v1.1.0";
+const VERSION = "v1.2.0";
 const BRAND = "Made by Shango Bashi";
 const GITHUB_URL = "https://github.com/shangobashi/followgraph";
 
-function msToClock(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const rS = s % 60;
-  const h = Math.floor(m / 60);
-  const rM = m % 60;
-  const pad = (x: number) => String(x).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(rM)}:${pad(rS)}` : `${m}:${pad(rS)}`;
-}
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, unknown> = {}, children: Array<Node | string> = []) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key === "style" && value && typeof value === "object") Object.assign((node as HTMLElement).style, value);
-    else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2).toLowerCase(), value as EventListener);
-    else if (value != null) node.setAttribute(key, String(value));
-  }
-  for (const child of children) node.append(typeof child === "string" ? document.createTextNode(child) : child);
-  return node;
-}
+let latestExportUsers: ClassifiedUser[] = [];
+let exportHandlersReady = false;
 
 type Refs = {
   status: HTMLDivElement | null;
@@ -62,6 +44,44 @@ const refs: Refs = {
   exportJsonBtn: null,
   exportCsvBtn: null
 };
+
+function msToClock(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const rS = s % 60;
+  const h = Math.floor(m / 60);
+  const rM = m % 60;
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(rM)}:${pad(rS)}` : `${m}:${pad(rS)}`;
+}
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, unknown> = {}, children: Array<Node | string> = []) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "style" && value && typeof value === "object") Object.assign((node as HTMLElement).style, value);
+    else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2).toLowerCase(), value as EventListener);
+    else if (value != null) node.setAttribute(key, String(value));
+  }
+  for (const child of children) node.append(typeof child === "string" ? document.createTextNode(child) : child);
+  return node;
+}
+
+function bindExportButtons() {
+  if (!refs.exportJsonBtn || !refs.exportCsvBtn || exportHandlersReady) return;
+  exportHandlersReady = true;
+
+  refs.exportJsonBtn.addEventListener("click", () => {
+    if (!latestExportUsers.length) return;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadJson(`followgraph-${timestamp}.json`, latestExportUsers);
+  });
+
+  refs.exportCsvBtn.addEventListener("click", () => {
+    if (!latestExportUsers.length) return;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadCsv(`followgraph-${timestamp}.csv`, toCSV(latestExportUsers));
+  });
+}
 
 export function ensureUI() {
   if (document.getElementById(PANEL_ID)) return;
@@ -185,7 +205,7 @@ export function ensureUI() {
     el("div", { class: "title" }, [`FollowGraph ${VERSION}`]),
     el("div", { class: "meta" }, [
       el("span", {}, ["Client-side"]),
-      el("span", {}, ["•"]),
+      el("span", {}, ["|"]),
       el("a", { href: GITHUB_URL, target: "_blank", rel: "noreferrer noopener" }, ["GitHub"])
     ])
   ]);
@@ -215,6 +235,7 @@ export function ensureUI() {
 
   shadow.append(style, panel);
   document.documentElement.appendChild(root);
+  bindExportButtons();
 }
 
 export function uiSetStatus(message: string) {
@@ -243,24 +264,15 @@ export function uiSetSummary(summary: ScanSummary) {
 }
 
 export function uiEnableExport(classified: ClassifiedUser[]) {
+  latestExportUsers = classified;
   if (!refs.exportJsonBtn || !refs.exportCsvBtn) return;
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-
-  const jsonButton = refs.exportJsonBtn.cloneNode(true) as HTMLButtonElement;
-  refs.exportJsonBtn.replaceWith(jsonButton);
-  refs.exportJsonBtn = jsonButton;
   refs.exportJsonBtn.removeAttribute("disabled");
-  refs.exportJsonBtn.addEventListener("click", () => downloadJson(`followgraph-${timestamp}.json`, classified));
-
-  const csvButton = refs.exportCsvBtn.cloneNode(true) as HTMLButtonElement;
-  refs.exportCsvBtn.replaceWith(csvButton);
-  refs.exportCsvBtn = csvButton;
   refs.exportCsvBtn.removeAttribute("disabled");
-  refs.exportCsvBtn.addEventListener("click", () => downloadCsv(`followgraph-${timestamp}.csv`, toCSV(classified)));
+  bindExportButtons();
 }
 
 export function uiSetFinalStatus(reason: StopReason) {
   if (reason === "hardCap") uiSetStatus("Stopped (safety cap)");
   else if (reason === "maxUsers") uiSetStatus("Stopped (max users cap)");
-  else uiSetStatus("Complete");
+  else uiSetStatus("Scan complete");
 }

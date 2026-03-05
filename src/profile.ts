@@ -33,11 +33,9 @@ async function waitForSignal(timeoutMs = 12000) {
       text.includes("posts are protected") ||
       text.includes("account suspended") ||
       text.includes("hasn't posted") ||
-      text.includes("hasn’t posted") ||
       text.includes("no posts yet") ||
       text.includes("when they do, their posts will show up here") ||
-      text.includes("this account doesn't exist") ||
-      text.includes("this account doesn’t exist")
+      text.includes("this account doesn't exist")
     ) {
       return;
     }
@@ -102,7 +100,7 @@ export async function extractProfileActivity(expectedUsername?: string): Promise
     };
   }
 
-  if (text.includes("this account doesn't exist") || text.includes("this account doesn’t exist")) {
+  if (text.includes("this account doesn't exist")) {
     return {
       username,
       lastActivityISO: null,
@@ -125,7 +123,6 @@ export async function extractProfileActivity(expectedUsername?: string): Promise
 
   if (
     text.includes("hasn't posted") ||
-    text.includes("hasn’t posted") ||
     text.includes("no posts yet") ||
     text.includes("when they do, their posts will show up here")
   ) {

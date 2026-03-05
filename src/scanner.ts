@@ -1,16 +1,18 @@
-import type { Progress, ScanSummary } from "./types";
+import type { LastScan, Progress, ScanSummary } from "./types";
 import { classifyUsers, summarize } from "./activity";
 import { parseVisibleUsers } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
 import { UserStore } from "./store";
 import { runScrollLoop } from "./scroller";
 import { ensureUI, uiEnableExport, uiSetFinalStatus, uiSetStatus, uiSetSummary, uiUpdateProgress } from "./ui";
-import { saveLastScan } from "./storage";
+import { LAST_SCAN_KEY, saveLastScan } from "./storage";
 
 declare global {
   interface Window {
     __FOLLOWGRAPH_RUNNING__?: boolean;
     __FOLLOWGRAPH_LISTENER_READY__?: boolean;
+    __FOLLOWGRAPH_STORAGE_SYNC_READY__?: boolean;
+    __FOLLOWGRAPH_SCAN_COMPLETE__?: boolean;
   }
 }
 
@@ -20,6 +22,36 @@ function isFollowingPage(): boolean {
   return hostOk && pathOk;
 }
 
+function syncOverlayFromLastScan(last: LastScan) {
+  ensureUI();
+  uiSetSummary(last.summary);
+  uiEnableExport(last.users);
+
+  if (!window.__FOLLOWGRAPH_SCAN_COMPLETE__ || last.summary.Resolved <= 0) {
+    return;
+  }
+
+  const remaining = Math.max(last.summary.total - last.summary.Resolved, 0);
+  if (remaining > 0) {
+    uiSetStatus(`Activity enrichment running (${last.summary.Resolved}/${last.summary.total} resolved)...`);
+    return;
+  }
+
+  uiSetStatus("Activity enrichment complete.");
+}
+
+function registerStorageSync() {
+  if (!isFollowingPage() || window.__FOLLOWGRAPH_STORAGE_SYNC_READY__) return;
+  window.__FOLLOWGRAPH_STORAGE_SYNC_READY__ = true;
+
+  chrome.storage.onChanged.addListener((changes: Record<string, { newValue?: unknown }>, areaName: string) => {
+    if (areaName !== "local") return;
+    const next = changes[LAST_SCAN_KEY]?.newValue as LastScan | undefined;
+    if (!next) return;
+    syncOverlayFromLastScan(next);
+  });
+}
+
 async function runScan() {
   if (!isFollowingPage()) {
     ensureUI();
@@ -27,6 +59,7 @@ async function runScan() {
     return;
   }
 
+  window.__FOLLOWGRAPH_SCAN_COMPLETE__ = false;
   ensureUI();
   uiSetStatus("Scanning...");
 
@@ -58,6 +91,23 @@ async function runScan() {
   uiEnableExport(users);
 
   await saveLastScan(users, summary).catch(() => {});
+  window.__FOLLOWGRAPH_SCAN_COMPLETE__ = true;
+
+  uiSetStatus("Scan complete. Starting activity enrichment...");
+
+  const enrichment = await chrome.runtime
+    .sendMessage({ action: "FOLLOWGRAPH_START_ENRICHMENT", limit: 0 })
+    .catch((error: unknown) => ({
+      ok: false,
+      message: error instanceof Error ? error.message : "Activity enrichment could not start."
+    }));
+
+  if (enrichment?.ok) {
+    uiSetStatus("Scan complete. Activity enrichment is running in a helper tab.");
+    return;
+  }
+
+  uiSetStatus(`Scan complete. ${enrichment?.message || "Activity enrichment could not start."}`);
 }
 
 function registerRuntimeListener() {
@@ -69,12 +119,14 @@ function registerRuntimeListener() {
       if (window.__FOLLOWGRAPH_RUNNING__) {
         ensureUI();
         uiSetStatus("Already running.");
-        return;
+        sendResponse({ ok: false, message: "Already running." });
+        return true;
       }
 
       window.__FOLLOWGRAPH_RUNNING__ = true;
+      sendResponse({ ok: true, message: "Started." });
 
-      runScan()
+      void runScan()
         .catch((error) => {
           console.error(error);
           ensureUI();
@@ -84,7 +136,7 @@ function registerRuntimeListener() {
           window.__FOLLOWGRAPH_RUNNING__ = false;
         });
 
-      return;
+      return true;
     }
 
     if (msg?.action === "FOLLOWGRAPH_GET_PROFILE_ACTIVITY") {
@@ -122,3 +174,4 @@ function registerRuntimeListener() {
 }
 
 registerRuntimeListener();
+registerStorageSync();

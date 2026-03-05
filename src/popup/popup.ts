@@ -51,10 +51,22 @@ function isValidFollowingUrl(urlString: string) {
   }
 }
 
+function parseEnrichLimit() {
+  const parsed = Number.parseInt(enrichLimitInput.value, 10);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return 0;
+  return Math.max(0, parsed);
+}
+
+function parseUnfollowLimit() {
+  const parsed = Number.parseInt(unfollowLimitInput.value, 10);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return 25;
+  return Math.max(1, parsed);
+}
+
 function formatLastScan(last: LastScan) {
   const when = new Date(last.timestamp).toLocaleString();
   const summary = last.summary;
-  return [
+  const lines = [
     `Time: ${when}`,
     `Total: ${summary.total}`,
     `Resolved: ${summary.Resolved}`,
@@ -63,16 +75,28 @@ function formatLastScan(last: LastScan) {
     `Dormant: ${summary.Dormant}`,
     `Inactive: ${summary.Inactive}`,
     `Unknown: ${summary.Unknown}`
-  ].join("\n");
+  ];
+
+  if (summary.Resolved === 0 && summary.total > 0) {
+    lines.push("Activity resolution has not produced results yet.");
+  }
+
+  return lines.join("\n");
 }
 
 function formatActivitySummary(last: LastScan) {
   const summary = last.summary;
-  return [
+  const lines = [
     `Resolved profiles: ${summary.Resolved}/${summary.total}`,
     `Inactive for more than 30 days: ${summary.Over30}`,
     `Still unknown: ${summary.Unknown}`
-  ].join("\n");
+  ];
+
+  if (summary.Resolved === 0 && summary.total > 0) {
+    lines.push("Scan now auto-starts profile enrichment in a helper tab.");
+  }
+
+  return lines.join("\n");
 }
 
 function getInactiveCandidates(last: LastScan) {
@@ -96,7 +120,10 @@ function renderReviewList() {
   const visible = currentCandidates.slice(0, 80);
 
   if (visible.length === 0) {
-    reviewMetaEl.textContent = "No enriched accounts are currently marked as inactive for more than 30 days.";
+    reviewMetaEl.textContent =
+      cachedLast.summary.Resolved === 0
+        ? "Activity resolution is still pending. Once profiles resolve, inactive accounts will appear here."
+        : "No enriched accounts are currently marked as inactive for more than 30 days.";
     selectVisibleBtn.disabled = true;
     clearSelectionBtn.disabled = selectedUsernames.size === 0;
     unfollowSelectedBtn.disabled = true;
@@ -129,7 +156,7 @@ function renderReviewList() {
     const sub = document.createElement("div");
     sub.className = "reviewSub";
     const state = user.profileState === "posts" ? user.displayName || "Activity enriched" : user.note || user.profileState;
-    sub.textContent = `${state}${user.lastCheckedAt ? ` • checked ${new Date(user.lastCheckedAt).toLocaleDateString()}` : ""}`;
+    sub.textContent = `${state}${user.lastCheckedAt ? ` | checked ${new Date(user.lastCheckedAt).toLocaleDateString()}` : ""}`;
 
     const days = document.createElement("div");
     days.className = "reviewDays";
@@ -186,12 +213,17 @@ async function requestBackground<T>(payload: Record<string, unknown>) {
 }
 
 function formatJob(job: JobState | null) {
-  if (!job) return "No active job.";
+  if (!job) {
+    if (cachedLast?.summary.total && cachedLast.summary.Resolved < cachedLast.summary.total) {
+      return "No active job. Use Resume Enrichment if activity resolution stopped before completion.";
+    }
+    return "No active job.";
+  }
 
   return [
-    `${job.type === "enrich" ? "Enrichment" : "Unfollow"} • ${job.status}`,
+    `${job.type === "enrich" ? "Enrichment" : "Unfollow"} | ${job.status}`,
     `Progress: ${job.completed}/${job.total}`,
-    `Succeeded: ${job.succeeded} • Failed: ${job.failed} • Skipped: ${job.skipped}`,
+    `Succeeded: ${job.succeeded} | Failed: ${job.failed} | Skipped: ${job.skipped}`,
     job.currentUser ? `Current: @${job.currentUser.username}` : "",
     job.message
   ]
@@ -280,7 +312,7 @@ startBtn.addEventListener("click", async () => {
     });
 
     await chrome.tabs.sendMessage(tab.id, { action: "FOLLOWGRAPH_START" });
-    setStatus("Started. Check the page overlay.", "success");
+    setStatus("Scan started. Activity resolution will auto-start when the scan completes.", "success");
   } catch (error) {
     console.error(error);
     setStatus("Scan injection failed. See console.", "error");
@@ -288,7 +320,7 @@ startBtn.addEventListener("click", async () => {
 });
 
 enrichBtn.addEventListener("click", async () => {
-  const limit = Number.parseInt(enrichLimitInput.value, 10) || 100;
+  const limit = parseEnrichLimit();
   const result = await requestBackground<{ ok: boolean; message: string }>({
     action: "FOLLOWGRAPH_START_ENRICHMENT",
     limit
@@ -304,7 +336,7 @@ unfollowSelectedBtn.addEventListener("click", async () => {
     return;
   }
 
-  const limit = Number.parseInt(unfollowLimitInput.value, 10) || 25;
+  const limit = parseUnfollowLimit();
   const usernames = Array.from(selectedUsernames).slice(0, limit);
   const confirmed = window.confirm(
     `Unfollow ${usernames.length} selected account${usernames.length === 1 ? "" : "s"}? Only enriched accounts inactive for more than 30 days will be processed.`

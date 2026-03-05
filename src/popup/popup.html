@@ -10,18 +10,18 @@
     <div class="wrap">
       <div class="titleRow">
         <div class="title">FollowGraph</div>
-        <div class="subtitle">Scan, enrich, review, unfollow.</div>
+        <div class="subtitle">Scan, resolve activity, review, unfollow.</div>
       </div>
 
       <div class="actionGrid">
-        <button id="startBtn" class="btn">Scan Following</button>
-        <button id="enrichBtn" class="btn alt">Enrich Activity</button>
+        <button id="startBtn" class="btn">Scan + Auto Enrich</button>
+        <button id="enrichBtn" class="btn alt">Resume Enrichment</button>
       </div>
 
       <div class="controlGrid">
         <label class="field">
-          <span>Enrich batch</span>
-          <input id="enrichLimit" type="number" min="1" max="250" value="100" />
+          <span>Enrich batch (0 = all)</span>
+          <input id="enrichLimit" type="number" min="0" max="10000" value="0" />
         </label>
         <label class="field">
           <span>Unfollow batch</span>
@@ -30,7 +30,7 @@
       </div>
 
       <div class="hint">
-        Scan the <span class="mono">/following</span> page first. Activity is enriched from profile timelines in a helper tab.
+        Scanning now auto-starts activity resolution in a helper tab. Use resume if the job was stopped or you only want to run a manual batch.
       </div>
 
       <div class="card">
