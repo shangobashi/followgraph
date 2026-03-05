@@ -1,6 +1,7 @@
 import * as esbuild from "esbuild";
 import fs from "node:fs";
 import path from "node:path";
+import { zipSync } from "fflate";
 
 const args = process.argv.slice(2);
 const watch = args.includes("--watch");
@@ -8,9 +9,12 @@ const watch = args.includes("--watch");
 const root = process.cwd();
 const srcDir = path.join(root, "src");
 const outDir = path.join(root, "extension");
+const publicDir = path.join(root, "public");
+const downloadsDir = path.join(publicDir, "downloads");
+const zipPath = path.join(downloadsDir, "followgraph-extension.zip");
 
-function ensureDir(p) {
-  fs.mkdirSync(p, { recursive: true });
+function ensureDir(targetPath) {
+  fs.mkdirSync(targetPath, { recursive: true });
 }
 
 function copyFile(from, to) {
@@ -21,11 +25,35 @@ function copyFile(from, to) {
 function copyDir(from, to) {
   ensureDir(to);
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
-    const a = path.join(from, entry.name);
-    const b = path.join(to, entry.name);
-    if (entry.isDirectory()) copyDir(a, b);
-    else copyFile(a, b);
+    const sourcePath = path.join(from, entry.name);
+    const destinationPath = path.join(to, entry.name);
+    if (entry.isDirectory()) copyDir(sourcePath, destinationPath);
+    else copyFile(sourcePath, destinationPath);
   }
+}
+
+function collectDirectoryEntries(from, prefix = "") {
+  const entries = {};
+
+  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    const sourcePath = path.join(from, entry.name);
+    const zipName = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+    if (entry.isDirectory()) {
+      Object.assign(entries, collectDirectoryEntries(sourcePath, zipName));
+      continue;
+    }
+
+    entries[zipName] = new Uint8Array(fs.readFileSync(sourcePath));
+  }
+
+  return entries;
+}
+
+function writeExtensionZip() {
+  ensureDir(downloadsDir);
+  const archive = zipSync(collectDirectoryEntries(outDir, "extension"), { level: 9 });
+  fs.writeFileSync(zipPath, Buffer.from(archive));
 }
 
 async function buildOnce() {
@@ -67,13 +95,15 @@ async function buildOnce() {
 
   const maybe = path.join(outDir, "popup", "popup.ts");
   if (fs.existsSync(maybe)) fs.unlinkSync(maybe);
+
+  writeExtensionZip();
 }
 
 if (!watch) {
   buildOnce()
-    .then(() => console.log("Built to ./extension"))
-    .catch((e) => {
-      console.error(e);
+    .then(() => console.log("Built to ./extension and packaged ./public/downloads/followgraph-extension.zip"))
+    .catch((error) => {
+      console.error(error);
       process.exit(1);
     });
 } else {
@@ -117,7 +147,8 @@ if (!watch) {
   fs.watch(path.join(srcDir, "manifest.json"), { persistent: true }, () => {
     try {
       copyFile(path.join(srcDir, "manifest.json"), path.join(outDir, "manifest.json"));
-      console.log("Copied manifest.json");
+      writeExtensionZip();
+      console.log("Copied manifest.json and refreshed extension zip");
     } catch {}
   });
 
@@ -126,7 +157,8 @@ if (!watch) {
       copyDir(path.join(srcDir, "popup"), path.join(outDir, "popup"));
       const maybe = path.join(outDir, "popup", "popup.ts");
       if (fs.existsSync(maybe)) fs.unlinkSync(maybe);
-      console.log("Copied popup/");
+      writeExtensionZip();
+      console.log("Copied popup/ and refreshed extension zip");
     } catch {}
   });
 }
