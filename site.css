@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #07111d;
   --bg-soft: #0d1726;
   --surface: rgba(9, 18, 30, 0.58);
@@ -271,10 +271,14 @@ ol {
 }
 
 .trust-row {
-  margin-top: 26px;
+  margin-top: 24px;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  row-gap: 16px;
+  padding: 6px 0 2px;
+  overflow: clip;
+  align-items: flex-start;
 }
 
 .trust-row span,
@@ -285,6 +289,8 @@ ol {
   background: rgba(255, 255, 255, 0.04);
   color: var(--muted);
   font-size: 0.92rem;
+  position: relative;
+  will-change: transform;
 }
 
 .hero-visual {
@@ -813,7 +819,7 @@ ol {
 .footer-rule {
   position: relative;
   width: min(75vw, 980px);
-  height: 16px;
+  height: 10px;
   overflow: hidden;
 }
 
@@ -832,11 +838,12 @@ ol {
 }
 
 .footer-rule-beam {
-  width: 22%;
-  height: 12px;
+  width: 17%;
+  height: 4px;
   border-radius: 999px;
-  background: linear-gradient(90deg, transparent, rgba(124, 242, 211, 0.8), rgba(120, 166, 255, 0.85), transparent);
-  filter: blur(7px);
+  background: linear-gradient(90deg, transparent, rgba(124, 242, 211, 0.46), rgba(120, 166, 255, 0.58), transparent);
+  filter: blur(3px);
+  opacity: 0.92;
 }
 
 .page-footer p {
@@ -1000,3 +1007,4 @@ body.modal-open {
     animation: none;
   }
 }
+

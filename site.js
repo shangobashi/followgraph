@@ -1,4 +1,4 @@
-const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+﻿const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 document.addEventListener("DOMContentLoaded", () => {
   initPointerGlow();
@@ -106,8 +106,9 @@ function initAnimations() {
   });
 
   gsap.to(".trust-row span", {
-    y: -4,
-    duration: 1.9,
+    y: 1.75,
+    scale: 1.012,
+    duration: 2.25,
     stagger: {
       each: 0.12,
       from: "random",
@@ -128,8 +129,8 @@ function initAnimations() {
   });
 
   gsap.to(".footer-rule-beam", {
-    xPercent: 440,
-    duration: 4.2,
+    xPercent: 470,
+    duration: 5.8,
     repeat: -1,
     ease: "none"
   });
@@ -367,3 +368,4 @@ function initConstellation() {
   resize();
   draw();
 }
+
