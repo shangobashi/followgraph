@@ -106,9 +106,11 @@ function initAnimations() {
   });
 
   gsap.to(".trust-row span", {
-    y: 1.75,
-    scale: 1.012,
-    duration: 2.25,
+    backgroundColor: "rgba(255, 255, 255, 0.065)",
+    borderColor: "rgba(124, 242, 211, 0.24)",
+    boxShadow: "0 10px 26px rgba(120, 166, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.035)",
+    opacity: 1,
+    duration: 2.6,
     stagger: {
       each: 0.12,
       from: "random",
@@ -368,4 +370,5 @@ function initConstellation() {
   resize();
   draw();
 }
+
 

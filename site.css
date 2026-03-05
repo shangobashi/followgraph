@@ -276,8 +276,8 @@ ol {
   flex-wrap: wrap;
   gap: 12px;
   row-gap: 16px;
-  padding: 6px 0 2px;
-  overflow: clip;
+  padding: 6px 0 4px;
+  overflow: visible;
   align-items: flex-start;
 }
 
@@ -290,7 +290,8 @@ ol {
   color: var(--muted);
   font-size: 0.92rem;
   position: relative;
-  will-change: transform;
+  will-change: background-color, border-color, box-shadow, opacity;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
 }
 
 .hero-visual {
@@ -1007,4 +1008,5 @@ body.modal-open {
     animation: none;
   }
 }
+
 
