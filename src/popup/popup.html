@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="./popup.css" />
+    <title>FollowGraph</title>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="titleRow">
+        <div class="title">FollowGraph</div>
+        <div class="subtitle">Client-side Following Exporter</div>
+      </div>
+
+      <button id="startBtn" class="btn">Scan Following</button>
+
+      <div class="hint">
+        Works on <span class="mono">/following</span> pages on
+        <span class="mono">x.com</span> / <span class="mono">twitter.com</span>.
+      </div>
+
+      <div class="card">
+        <div class="cardTitle">Last scan</div>
+        <div id="lastScan" class="cardBody">-</div>
+        <div class="cardActions">
+          <button id="exportLastJson" class="btnSmall" disabled>Export JSON</button>
+          <button id="exportLastCsv" class="btnSmall" disabled>Export CSV</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardTitle">Diff</div>
+        <div id="diff" class="cardBody">-</div>
+      </div>
+
+      <div id="status" class="status"></div>
+
+      <div class="footer">Made by Shango Bashi</div>
+    </div>
+
+    <script src="./popup.js"></script>
+  </body>
+</html>
