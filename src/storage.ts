@@ -1,17 +1,44 @@
-import type { ClassifiedUser, LastScan, ScanSummary } from "./types";
+import type { ClassifiedUser, JobState, LastScan, ScanSummary, UnfollowAuditEntry } from "./types";
 
-const KEY = "followgraph:lastScan";
+export const LAST_SCAN_KEY = "followgraph:lastScan";
+export const JOB_KEY = "followgraph:job";
+export const AUDIT_KEY = "followgraph:unfollowAudit";
 
-export async function saveLastScan(users: ClassifiedUser[], summary: ScanSummary) {
+export async function saveLastScan(users: ClassifiedUser[], summary: ScanSummary, timestamp = Date.now()) {
   const payload: LastScan = {
-    timestamp: Date.now(),
+    timestamp,
     users,
     summary
   };
-  await chrome.storage.local.set({ [KEY]: payload });
+  await chrome.storage.local.set({ [LAST_SCAN_KEY]: payload });
 }
 
 export async function loadLastScan(): Promise<LastScan | null> {
-  const data = await chrome.storage.local.get(KEY);
-  return (data[KEY] as LastScan) || null;
+  const data = await chrome.storage.local.get(LAST_SCAN_KEY);
+  return (data[LAST_SCAN_KEY] as LastScan) || null;
+}
+
+export async function saveJobState(job: JobState | null) {
+  if (!job) {
+    await chrome.storage.local.remove(JOB_KEY);
+    return;
+  }
+
+  await chrome.storage.local.set({ [JOB_KEY]: job });
+}
+
+export async function loadJobState(): Promise<JobState | null> {
+  const data = await chrome.storage.local.get(JOB_KEY);
+  return (data[JOB_KEY] as JobState) || null;
+}
+
+export async function appendUnfollowAudit(entries: UnfollowAuditEntry[]) {
+  const existing = await loadUnfollowAudit();
+  const next = [...entries, ...existing].slice(0, 500);
+  await chrome.storage.local.set({ [AUDIT_KEY]: next });
+}
+
+export async function loadUnfollowAudit(): Promise<UnfollowAuditEntry[]> {
+  const data = await chrome.storage.local.get(AUDIT_KEY);
+  return (data[AUDIT_KEY] as UnfollowAuditEntry[]) || [];
 }

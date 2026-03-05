@@ -106,11 +106,12 @@ function initAnimations() {
   });
 
   gsap.to(".trust-row span", {
-    backgroundColor: "rgba(255, 255, 255, 0.065)",
-    borderColor: "rgba(124, 242, 211, 0.24)",
-    boxShadow: "0 10px 26px rgba(120, 166, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.035)",
+    x: 2.4,
+    backgroundColor: "rgba(255, 255, 255, 0.062)",
+    borderColor: "rgba(124, 242, 211, 0.22)",
+    boxShadow: "0 8px 20px rgba(120, 166, 255, 0.06), inset 0 0 0 1px rgba(255, 255, 255, 0.03)",
     opacity: 1,
-    duration: 2.6,
+    duration: 2.8,
     stagger: {
       each: 0.12,
       from: "random",
@@ -370,5 +371,6 @@ function initConstellation() {
   resize();
   draw();
 }
+
 
 

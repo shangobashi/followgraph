@@ -290,7 +290,7 @@ ol {
   color: var(--muted);
   font-size: 0.92rem;
   position: relative;
-  will-change: background-color, border-color, box-shadow, opacity;
+  will-change: transform, background-color, border-color, box-shadow, opacity;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
 }
 
@@ -1008,5 +1008,6 @@ body.modal-open {
     animation: none;
   }
 }
+
 
 

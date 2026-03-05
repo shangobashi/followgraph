@@ -1,9 +1,12 @@
 :root {
-  --bg: #0f0f12;
-  --fg: #e6e6e6;
-  --muted: rgba(230, 230, 230, 0.65);
+  --bg: #0f1117;
+  --fg: #e8edf6;
+  --muted: rgba(232, 237, 246, 0.66);
   --border: rgba(255, 255, 255, 0.1);
   --panel: rgba(255, 255, 255, 0.04);
+  --panel-strong: rgba(255, 255, 255, 0.07);
+  --accent: #78d7be;
+  --danger: #f28f8f;
 }
 
 * {
@@ -13,7 +16,7 @@
 body {
   margin: 0;
   padding: 12px;
-  width: 320px;
+  width: 360px;
   background: var(--bg);
   color: var(--fg);
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
@@ -42,37 +45,92 @@ body {
   color: var(--muted);
 }
 
-.btn {
+.actionGrid,
+.controlGrid,
+.cardActions,
+.reviewActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.field input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--fg);
+}
+
+.btn,
+.btnSmall,
+.btnTiny {
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--fg);
   border-radius: 10px;
   cursor: pointer;
+  font-family: inherit;
+}
+
+.btn {
+  width: 100%;
+  padding: 10px 12px;
   font-weight: 750;
 }
 
-.btn:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
+.btn.alt {
+  background: rgba(120, 215, 190, 0.08);
 }
 
-.hint {
+.btnSmall {
+  padding: 8px 10px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.btnTiny {
+  padding: 7px 8px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.btn:hover,
+.btnSmall:hover,
+.btnTiny:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--panel-strong);
+}
+
+.btnSmall.danger {
+  border-color: rgba(242, 143, 143, 0.26);
+  color: #ffd7d7;
+}
+
+.hint,
+.status,
+.cardBody,
+.reviewMeta {
   font-size: 11px;
   color: var(--muted);
-  line-height: 1.35;
+  line-height: 1.45;
 }
 
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  color: rgba(230, 230, 230, 0.82);
+  color: rgba(232, 237, 246, 0.84);
 }
 
 .status {
-  font-size: 11px;
   min-height: 16px;
-  color: rgba(230, 230, 230, 0.75);
 }
 
 .card {
@@ -84,43 +142,73 @@ body {
 
 .cardTitle {
   font-size: 11px;
-  color: rgba(230, 230, 230, 0.8);
+  color: rgba(232, 237, 246, 0.82);
   font-weight: 800;
   margin-bottom: 6px;
 }
 
-.cardBody {
-  font-size: 11px;
-  color: rgba(230, 230, 230, 0.7);
-  line-height: 1.35;
-  white-space: pre-wrap;
+.small {
+  font-size: 10px;
 }
 
-.cardActions {
-  margin-top: 8px;
-  display: flex;
+.reviewCard {
   gap: 8px;
 }
 
-.btnSmall {
-  flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--fg);
+.reviewActions {
+  margin-bottom: 8px;
+}
+
+.reviewList {
+  max-height: 220px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.reviewItem {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
   border-radius: 10px;
-  cursor: pointer;
-  font-weight: 750;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.reviewItem input {
+  margin-top: 2px;
+}
+
+.reviewName {
   font-size: 11px;
+  font-weight: 700;
+  color: var(--fg);
 }
 
-.btnSmall:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
+.reviewSub {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 3px;
 }
 
+.reviewDays {
+  font-size: 10px;
+  color: rgba(242, 143, 143, 0.9);
+  white-space: nowrap;
+}
+
+.reviewFooter {
+  margin-top: 8px;
+  grid-template-columns: 1fr;
+}
+
+.btn:disabled,
 .btnSmall:disabled,
-.btn:disabled {
+.btnTiny:disabled,
+.field input:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -128,5 +216,5 @@ body {
 .footer {
   margin-top: 2px;
   font-size: 11px;
-  color: rgba(230, 230, 230, 0.55);
+  color: rgba(232, 237, 246, 0.55);
 }

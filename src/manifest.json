@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Client-side Following Exporter for X/Twitter. No servers, no tracking.",
   "author": "Shango Bashi",
-  "permissions": ["scripting", "activeTab", "storage"],
+  "permissions": ["scripting", "activeTab", "storage", "tabs"],
   "host_permissions": ["https://twitter.com/*", "https://x.com/*"],
   "background": {
     "service_worker": "background.js"

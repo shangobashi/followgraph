@@ -10,14 +10,27 @@
     <div class="wrap">
       <div class="titleRow">
         <div class="title">FollowGraph</div>
-        <div class="subtitle">Client-side Following Exporter</div>
+        <div class="subtitle">Scan, enrich, review, unfollow.</div>
       </div>
 
-      <button id="startBtn" class="btn">Scan Following</button>
+      <div class="actionGrid">
+        <button id="startBtn" class="btn">Scan Following</button>
+        <button id="enrichBtn" class="btn alt">Enrich Activity</button>
+      </div>
+
+      <div class="controlGrid">
+        <label class="field">
+          <span>Enrich batch</span>
+          <input id="enrichLimit" type="number" min="1" max="250" value="100" />
+        </label>
+        <label class="field">
+          <span>Unfollow batch</span>
+          <input id="unfollowLimit" type="number" min="1" max="50" value="25" />
+        </label>
+      </div>
 
       <div class="hint">
-        Works on <span class="mono">/following</span> pages on
-        <span class="mono">x.com</span> / <span class="mono">twitter.com</span>.
+        Scan the <span class="mono">/following</span> page first. Activity is enriched from profile timelines in a helper tab.
       </div>
 
       <div class="card">
@@ -30,8 +43,33 @@
       </div>
 
       <div class="card">
-        <div class="cardTitle">Diff</div>
-        <div id="diff" class="cardBody">-</div>
+        <div class="cardTitle">Activity</div>
+        <div id="activitySummary" class="cardBody">-</div>
+        <div class="cardActions">
+          <button id="exportInactiveJson" class="btnSmall" disabled>Export &gt;30d JSON</button>
+          <button id="exportInactiveCsv" class="btnSmall" disabled>Export &gt;30d CSV</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardTitle">Job status</div>
+        <div id="jobStatus" class="cardBody">No active job.</div>
+        <div class="cardActions">
+          <button id="cancelJobBtn" class="btnSmall" disabled>Stop job</button>
+        </div>
+      </div>
+
+      <div class="card reviewCard">
+        <div class="cardTitle">Inactive &gt;30d review</div>
+        <div class="reviewActions">
+          <button id="selectVisibleBtn" class="btnTiny" disabled>Select visible</button>
+          <button id="clearSelectionBtn" class="btnTiny" disabled>Clear</button>
+        </div>
+        <div id="reviewMeta" class="cardBody small">-</div>
+        <div id="reviewList" class="reviewList"></div>
+        <div class="cardActions reviewFooter">
+          <button id="unfollowSelectedBtn" class="btnSmall danger" disabled>Unfollow selected</button>
+        </div>
       </div>
 
       <div id="status" class="status"></div>

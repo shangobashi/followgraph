@@ -2,7 +2,7 @@ import type { ClassifiedUser, Progress, ScanSummary, StopReason } from "./types"
 import { downloadCsv, downloadJson, toCSV } from "./exporter";
 
 const PANEL_ID = "followgraph-root";
-const VERSION = "v1.0.0";
+const VERSION = "v1.1.0";
 const BRAND = "Made by Shango Bashi";
 const GITHUB_URL = "https://github.com/shangobashi/followgraph";
 
@@ -16,18 +16,14 @@ function msToClock(ms: number): string {
   return h > 0 ? `${h}:${pad(rM)}:${pad(rS)}` : `${m}:${pad(rS)}`;
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  attrs: Record<string, unknown> = {},
-  children: Array<Node | string> = []
-) {
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, unknown> = {}, children: Array<Node | string> = []) {
   const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === "style" && v && typeof v === "object") Object.assign((node as HTMLElement).style, v);
-    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2).toLowerCase(), v as EventListener);
-    else if (v != null) node.setAttribute(k, String(v));
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "style" && value && typeof value === "object") Object.assign((node as HTMLElement).style, value);
+    else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2).toLowerCase(), value as EventListener);
+    else if (value != null) node.setAttribute(key, String(value));
   }
-  for (const c of children) node.append(typeof c === "string" ? document.createTextNode(c) : c);
+  for (const child of children) node.append(typeof child === "string" ? document.createTextNode(child) : child);
   return node;
 }
 
@@ -39,6 +35,8 @@ type Refs = {
   idle: HTMLDivElement | null;
   delay: HTMLDivElement | null;
   elapsed: HTMLDivElement | null;
+  resolved: HTMLDivElement | null;
+  over30: HTMLDivElement | null;
   active: HTMLDivElement | null;
   dormant: HTMLDivElement | null;
   inactive: HTMLDivElement | null;
@@ -55,6 +53,8 @@ const refs: Refs = {
   idle: null,
   delay: null,
   elapsed: null,
+  resolved: null,
+  over30: null,
   active: null,
   dormant: null,
   inactive: null,
@@ -75,12 +75,11 @@ export function ensureUI() {
   });
 
   const shadow = root.attachShadow({ mode: "open" });
-
   const style = el("style");
   style.textContent = `
     :host { all: initial; }
     .panel {
-      width: 300px;
+      width: 320px;
       background: rgba(15, 15, 18, 0.95);
       border: 1px solid rgba(255,255,255,0.10);
       border-radius: 14px;
@@ -112,7 +111,6 @@ export function ensureUI() {
       text-decoration: none;
       border-bottom: 1px dotted rgba(230,230,230,0.25);
     }
-    .meta a:hover { color: rgba(230,230,230,0.95); }
     .close {
       border: 1px solid rgba(255,255,255,0.10);
       background: rgba(255,255,255,0.04);
@@ -124,7 +122,6 @@ export function ensureUI() {
       height: fit-content;
       flex-shrink: 0;
     }
-    .close:hover { background: rgba(255,255,255,0.07); }
     .status { font-size: 11px; color: rgba(230,230,230,0.80); margin-bottom: 10px; min-height: 16px; }
     .grid {
       display:grid;
@@ -155,7 +152,6 @@ export function ensureUI() {
       font-weight: 800;
       font-family: inherit;
     }
-    .btn:hover { background: rgba(255,255,255,0.07); }
     .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
     .sub {
       margin-top: 8px;
@@ -169,7 +165,6 @@ export function ensureUI() {
   `;
 
   const closeBtn = el("button", { class: "close", onClick: () => root.remove() }, ["Close"]);
-
   refs.status = el("div", { class: "status" }, ["Status: -"]);
   refs.extracted = el("div", { class: "value" }, ["0"]);
   refs.visible = el("div", { class: "value" }, ["0"]);
@@ -177,6 +172,8 @@ export function ensureUI() {
   refs.idle = el("div", { class: "value" }, ["0"]);
   refs.delay = el("div", { class: "value" }, ["-"]);
   refs.elapsed = el("div", { class: "value" }, ["0:00"]);
+  refs.resolved = el("div", { class: "value" }, ["-"]);
+  refs.over30 = el("div", { class: "value inactive" }, ["-"]);
   refs.active = el("div", { class: "value active" }, ["-"]);
   refs.dormant = el("div", { class: "value dormant" }, ["-"]);
   refs.inactive = el("div", { class: "value inactive" }, ["-"]);
@@ -194,35 +191,25 @@ export function ensureUI() {
   ]);
 
   const grid = el("div", { class: "grid" }, [
-    el("div", { class: "label" }, ["Extracted unique"]),
-    refs.extracted,
-    el("div", { class: "label" }, ["Visible cells"]),
-    refs.visible,
-    el("div", { class: "label" }, ["Rounds"]),
-    refs.rounds,
-    el("div", { class: "label" }, ["Idle rounds"]),
-    refs.idle,
-    el("div", { class: "label" }, ["Delay"]),
-    refs.delay,
-    el("div", { class: "label" }, ["Elapsed"]),
-    refs.elapsed,
-    el("div", { class: "label" }, ["Active (<=30d)"]),
-    refs.active,
-    el("div", { class: "label" }, ["Dormant (<=180d)"]),
-    refs.dormant,
-    el("div", { class: "label" }, ["Inactive (>180d)"]),
-    refs.inactive,
-    el("div", { class: "label" }, ["Unknown"]),
-    refs.unknown
+    el("div", { class: "label" }, ["Extracted unique"]), refs.extracted,
+    el("div", { class: "label" }, ["Visible cells"]), refs.visible,
+    el("div", { class: "label" }, ["Rounds"]), refs.rounds,
+    el("div", { class: "label" }, ["Idle rounds"]), refs.idle,
+    el("div", { class: "label" }, ["Delay"]), refs.delay,
+    el("div", { class: "label" }, ["Elapsed"]), refs.elapsed,
+    el("div", { class: "label" }, ["Resolved"]), refs.resolved,
+    el("div", { class: "label" }, [">30d"]), refs.over30,
+    el("div", { class: "label" }, ["Active (<=30d)"]), refs.active,
+    el("div", { class: "label" }, ["Dormant (<=180d)"]), refs.dormant,
+    el("div", { class: "label" }, ["Inactive (>180d)"]), refs.inactive,
+    el("div", { class: "label" }, ["Unknown"]), refs.unknown
   ]);
-
-  const btnRow = el("div", { class: "btnRow" }, [refs.exportJsonBtn, refs.exportCsvBtn]);
 
   const panel = el("div", { class: "panel" }, [
     el("div", { class: "top" }, [titleRow, closeBtn]),
     refs.status,
     grid,
-    btnRow,
+    el("div", { class: "btnRow" }, [refs.exportJsonBtn, refs.exportCsvBtn]),
     el("div", { class: "sub" }, [el("div", {}, ["No data leaves your browser."]), el("div", {}, [BRAND])])
   ]);
 
@@ -230,24 +217,25 @@ export function ensureUI() {
   document.documentElement.appendChild(root);
 }
 
-export function uiSetStatus(msg: string) {
+export function uiSetStatus(message: string) {
   if (!refs.status) return;
-  refs.status.textContent = `Status: ${msg}`;
+  refs.status.textContent = `Status: ${message}`;
 }
 
-export function uiUpdateProgress(p: Progress) {
+export function uiUpdateProgress(progress: Progress) {
   if (!refs.extracted || !refs.visible || !refs.rounds || !refs.idle || !refs.delay || !refs.elapsed) return;
-
-  refs.extracted.textContent = String(p.extractedTotal ?? 0);
-  refs.visible.textContent = String(p.visibleCells ?? 0);
-  refs.rounds.textContent = String(p.rounds ?? 0);
-  refs.idle.textContent = String(p.idleRounds ?? 0);
-  refs.delay.textContent = `${Math.round(p.delayMs)}ms`;
-  refs.elapsed.textContent = msToClock(p.elapsedMs);
+  refs.extracted.textContent = String(progress.extractedTotal ?? 0);
+  refs.visible.textContent = String(progress.visibleCells ?? 0);
+  refs.rounds.textContent = String(progress.rounds ?? 0);
+  refs.idle.textContent = String(progress.idleRounds ?? 0);
+  refs.delay.textContent = `${Math.round(progress.delayMs)}ms`;
+  refs.elapsed.textContent = msToClock(progress.elapsedMs);
 }
 
 export function uiSetSummary(summary: ScanSummary) {
-  if (!refs.active || !refs.dormant || !refs.inactive || !refs.unknown) return;
+  if (!refs.resolved || !refs.over30 || !refs.active || !refs.dormant || !refs.inactive || !refs.unknown) return;
+  refs.resolved.textContent = String(summary.Resolved ?? 0);
+  refs.over30.textContent = String(summary.Over30 ?? 0);
   refs.active.textContent = String(summary.Active ?? 0);
   refs.dormant.textContent = String(summary.Dormant ?? 0);
   refs.inactive.textContent = String(summary.Inactive ?? 0);
@@ -256,24 +244,19 @@ export function uiSetSummary(summary: ScanSummary) {
 
 export function uiEnableExport(classified: ClassifiedUser[]) {
   if (!refs.exportJsonBtn || !refs.exportCsvBtn) return;
-
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
   const jsonButton = refs.exportJsonBtn.cloneNode(true) as HTMLButtonElement;
   refs.exportJsonBtn.replaceWith(jsonButton);
   refs.exportJsonBtn = jsonButton;
   refs.exportJsonBtn.removeAttribute("disabled");
-  refs.exportJsonBtn.addEventListener("click", () => {
-    downloadJson(`followgraph-${ts}.json`, classified);
-  });
+  refs.exportJsonBtn.addEventListener("click", () => downloadJson(`followgraph-${timestamp}.json`, classified));
 
   const csvButton = refs.exportCsvBtn.cloneNode(true) as HTMLButtonElement;
   refs.exportCsvBtn.replaceWith(csvButton);
   refs.exportCsvBtn = csvButton;
   refs.exportCsvBtn.removeAttribute("disabled");
-  refs.exportCsvBtn.addEventListener("click", () => {
-    downloadCsv(`followgraph-${ts}.csv`, toCSV(classified));
-  });
+  refs.exportCsvBtn.addEventListener("click", () => downloadCsv(`followgraph-${timestamp}.csv`, toCSV(classified)));
 }
 
 export function uiSetFinalStatus(reason: StopReason) {
