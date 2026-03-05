@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="FollowGraph is a privacy-first browser extension for exporting your X/Twitter following graph client-side."
+    />
+    <title>FollowGraph</title>
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Made by Shango Bashi</p>
+        <h1>FollowGraph</h1>
+        <p class="lede">
+          A privacy-first Chrome and Edge extension that scans your X/Twitter Following page and exports your
+          following list without sending data to any server.
+        </p>
+        <div class="actions">
+          <a class="primary" href="https://github.com/shangobashi/followgraph" target="_blank" rel="noreferrer noopener">
+            View on GitHub
+          </a>
+          <a class="secondary" href="https://github.com/shangobashi/followgraph#install-dev" target="_blank" rel="noreferrer noopener">
+            Install Instructions
+          </a>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Why it works</h2>
+          <p>
+            X uses a virtualized list, so off-screen users disappear from the DOM. FollowGraph extracts users during
+            the scroll loop instead of waiting until the end.
+          </p>
+        </article>
+        <article class="card">
+          <h2>What it exports</h2>
+          <p>Unique accounts, profile URLs, last-seen activity timestamps when available, and CSV or JSON downloads.</p>
+        </article>
+        <article class="card">
+          <h2>Privacy model</h2>
+          <p>No servers, no OAuth, no tracking. Data stays in the browser and the latest scan is stored locally.</p>
+        </article>
+      </section>
+
+      <section class="install">
+        <div class="card wide">
+          <h2>Quick start</h2>
+          <ol>
+            <li>Clone the repo and run <code>npm install</code>.</li>
+            <li>Build the extension with <code>npm run build</code>.</li>
+            <li>Open <code>chrome://extensions</code> or the Edge extensions page.</li>
+            <li>Enable developer mode and load the generated <code>extension/</code> folder.</li>
+          </ol>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
