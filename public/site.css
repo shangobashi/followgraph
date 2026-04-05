@@ -766,6 +766,10 @@ ol {
   position: fixed;
   inset: 0;
   z-index: 12;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: max(16px, env(safe-area-inset-top)) 0 max(16px, env(safe-area-inset-bottom));
 }
 
 .modal-shell[hidden] {
@@ -782,7 +786,10 @@ ol {
 .install-modal {
   position: relative;
   width: min(920px, calc(100% - 28px));
-  margin: 6vh auto;
+  margin: 0 auto;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 28px;
   border-radius: 34px;
   background:
@@ -1006,7 +1013,16 @@ body.modal-open {
   }
 
   .install-modal {
-    margin-top: 3vh;
+    max-height: calc(100dvh - 24px);
+    display: flex;
+    flex-direction: column;
+    padding-top: 18px;
+  }
+
+  .modal-close {
+    position: static;
+    align-self: flex-end;
+    margin-bottom: 14px;
   }
 }
 

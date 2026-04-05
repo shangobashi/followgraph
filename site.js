@@ -188,6 +188,10 @@ function initInstallModal() {
     modalShell.hidden = false;
     modalShell.setAttribute("aria-hidden", "false");
     document.body.classList.add("modal-open");
+    modalShell.scrollTop = 0;
+    if (dialog instanceof HTMLElement) {
+      dialog.scrollTop = 0;
+    }
 
     if (gsap && dialog && !prefersReducedMotion) {
       gsap.fromTo(
