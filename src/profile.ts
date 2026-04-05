@@ -22,25 +22,29 @@ function currentUsername(fallback = "") {
   return location.pathname.split("/").filter(Boolean)[0] || fallback;
 }
 
-async function waitForSignal(timeoutMs = 12000) {
+function hasTerminalProfileState(text: string) {
+  return (
+    text.includes("posts are protected") ||
+    text.includes("account suspended") ||
+    text.includes("hasn't posted") ||
+    text.includes("no posts yet") ||
+    text.includes("when they do, their posts will show up here") ||
+    text.includes("this account doesn't exist")
+  );
+}
+
+async function waitForSignal(timeoutMs = 3500) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
     if (document.querySelector("article time[datetime]")) return;
 
     const text = pageText();
-    if (
-      text.includes("posts are protected") ||
-      text.includes("account suspended") ||
-      text.includes("hasn't posted") ||
-      text.includes("no posts yet") ||
-      text.includes("when they do, their posts will show up here") ||
-      text.includes("this account doesn't exist")
-    ) {
+    if (hasTerminalProfileState(text)) {
       return;
     }
 
-    await sleep(250);
+    await sleep(150);
   }
 }
 
@@ -78,7 +82,7 @@ export async function extractProfileActivity(expectedUsername?: string): Promise
   await waitForSignal();
 
   const username = currentUsername(expectedUsername || "");
-  const text = pageText();
+  let text = pageText();
 
   if (text.includes("posts are protected")) {
     return {
@@ -110,7 +114,66 @@ export async function extractProfileActivity(expectedUsername?: string): Promise
     };
   }
 
-  const latestTime = findLatestTimelineTime();
+  let latestTime = findLatestTimelineTime();
+  if (latestTime) {
+    return {
+      username,
+      lastActivityISO: latestTime,
+      activitySource: "profileTimeline",
+      profileState: "posts",
+      note: null
+    };
+  }
+
+  if (
+    text.includes("hasn't posted") ||
+    text.includes("no posts yet") ||
+    text.includes("when they do, their posts will show up here")
+  ) {
+    return {
+      username,
+      lastActivityISO: null,
+      activitySource: "none",
+      profileState: "noPosts",
+      note: "No public posts found."
+    };
+  }
+
+  // Give slower profiles one shorter second pass without reverting to the old 12s ceiling.
+  await waitForSignal(3500);
+  text = pageText();
+  latestTime = findLatestTimelineTime();
+
+  if (text.includes("posts are protected")) {
+    return {
+      username,
+      lastActivityISO: null,
+      activitySource: "none",
+      profileState: "protected",
+      note: "Posts are protected."
+    };
+  }
+
+  if (text.includes("account suspended")) {
+    return {
+      username,
+      lastActivityISO: null,
+      activitySource: "none",
+      profileState: "suspended",
+      note: "Account suspended."
+    };
+  }
+
+  if (text.includes("this account doesn't exist")) {
+    return {
+      username,
+      lastActivityISO: null,
+      activitySource: "none",
+      profileState: "unavailable",
+      note: "Account unavailable."
+    };
+  }
+
   if (latestTime) {
     return {
       username,

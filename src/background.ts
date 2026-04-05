@@ -1,14 +1,41 @@
 import type {
   ClassifiedUser,
   JobState,
+  JobType,
+  JobWorkerState,
   ProfileActivityResult,
   QueuedUser,
+  ScanSummary,
   UnfollowAuditEntry,
   UnfollowResult,
   UnfollowResultStatus
 } from "./types";
 import { classifyUsers, summarize } from "./activity";
 import { appendUnfollowAudit, loadJobState, loadLastScan, saveJobState, saveLastScan } from "./storage";
+
+const ENRICHMENT_DEFAULT_WORKERS = 10;
+const ENRICHMENT_MAX_WORKERS = 12;
+const ENRICHMENT_FLUSH_BATCH_SIZE = 20;
+
+type LastScanCache = {
+  users: ClassifiedUser[];
+  summary: ScanSummary;
+  timestamp: number;
+  indexByUsername: Map<string, number>;
+  dirtyCount: number;
+};
+
+let lastScanCache: LastScanCache | null = null;
+let serializedJobOperation: Promise<unknown> = Promise.resolve();
+
+function runSerialized<T>(operation: () => Promise<T>) {
+  const next = serializedJobOperation.then(operation, operation);
+  serializedJobOperation = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
+}
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -70,16 +97,131 @@ function resolveEnrichmentLimit(requestedLimit: number | undefined, totalUsers: 
   return clamp(parsed, 1, Math.max(totalUsers, 1));
 }
 
+function resolveWorkerCount(type: JobType, total: number) {
+  if (type === "unfollow") return Math.min(total, 1);
+  if (total <= 0) return 1;
+  const preferred = total >= 1500 ? ENRICHMENT_MAX_WORKERS : ENRICHMENT_DEFAULT_WORKERS;
+  return clamp(Math.min(total, preferred), 1, ENRICHMENT_MAX_WORKERS);
+}
+
+function buildLastScanCache(last: Awaited<ReturnType<typeof loadLastScan>>): LastScanCache | null {
+  if (!last) return null;
+
+  return {
+    users: last.users.map((user) => ({ ...user })),
+    summary: last.summary,
+    timestamp: last.timestamp,
+    indexByUsername: new Map(last.users.map((user, index) => [normalizeUsername(user.username), index])),
+    dirtyCount: 0
+  };
+}
+
+async function ensureLastScanCache(refresh = false) {
+  if (!refresh && lastScanCache) return lastScanCache;
+  lastScanCache = buildLastScanCache(await loadLastScan());
+  return lastScanCache;
+}
+
+async function flushLastScanCache(force = false) {
+  const cache = await ensureLastScanCache();
+  if (!cache) return;
+  if (!force && cache.dirtyCount < ENRICHMENT_FLUSH_BATCH_SIZE) return;
+
+  cache.summary = summarize(cache.users);
+  await saveLastScan(cache.users, cache.summary, cache.timestamp);
+  cache.dirtyCount = 0;
+}
+
+async function updateCachedUser(
+  queueUser: QueuedUser,
+  updater: (user: ClassifiedUser, now: number) => ClassifiedUser | Omit<ClassifiedUser, "category" | "daysSince" | "inactiveOver30">
+) {
+  let cache = await ensureLastScanCache();
+  if (!cache) return null;
+
+  const key = normalizeUsername(queueUser.username);
+  let index = cache.indexByUsername.get(key);
+  if (index === undefined) {
+    cache = await ensureLastScanCache(true);
+    index = cache?.indexByUsername.get(key);
+  }
+
+  if (cache == null || index === undefined) return null;
+
+  const now = Date.now();
+  const next = classifyUsers([updater(cache.users[index], now)], now)[0];
+  cache.users[index] = next;
+  cache.timestamp = now;
+  cache.dirtyCount += 1;
+  return next;
+}
+
+function ensureWorkers(job: JobState) {
+  if (job.workers?.length) return job.workers;
+
+  const workers: JobWorkerState[] = job.helperTabId
+    ? [
+        {
+          tabId: job.helperTabId,
+          phase: job.phase,
+          currentUser: job.currentUser,
+          updatedAt: job.updatedAt,
+          note: null
+        }
+      ]
+    : [];
+
+  job.workers = workers;
+  job.helperTabIds = workers.map((worker) => worker.tabId);
+  job.concurrency = workers.length || job.concurrency || 1;
+  return workers;
+}
+
+function syncLegacyJobFields(job: JobState) {
+  const workers = ensureWorkers(job);
+  const active = workers.find((worker) => worker.currentUser) ?? workers[0] ?? null;
+
+  job.helperTabIds = workers.map((worker) => worker.tabId);
+  job.helperTabId = active?.tabId ?? null;
+  job.currentUser = active?.currentUser ?? null;
+  job.phase = active?.phase ?? null;
+  job.concurrency = workers.length || job.concurrency || 1;
+
+  return job;
+}
+
+async function persistJob(job: JobState | null) {
+  if (!job) {
+    await saveJobState(null);
+    return;
+  }
+
+  job.updatedAt = Date.now();
+  await saveJobState(syncLegacyJobFields(job));
+}
+
+function findWorker(job: JobState, tabId: number) {
+  return ensureWorkers(job).find((worker) => worker.tabId === tabId) || null;
+}
+
+function activeWorkerCount(job: JobState) {
+  return ensureWorkers(job).filter((worker) => worker.currentUser).length;
+}
+
+function helperTabIds(job: JobState) {
+  return ensureWorkers(job).map((worker) => worker.tabId);
+}
+
 async function ensureHelperTab() {
   const tab = await chrome.tabs.create({ url: "about:blank", active: false });
   if (!tab?.id) throw new Error("Could not create helper tab.");
   return tab.id as number;
 }
 
-async function closeHelperTab(tabId: number | null) {
-  if (!tabId) return;
+async function closeHelperTabs(tabIds: number[]) {
+  if (tabIds.length === 0) return;
   try {
-    await chrome.tabs.remove(tabId);
+    await chrome.tabs.remove(tabIds);
   } catch {}
 }
 
@@ -100,19 +242,22 @@ async function helperTabMatchesCurrentUser(tabId: number, currentUser: QueuedUse
 }
 
 async function finalizeJob(job: JobState, status: JobState["status"], message: string) {
-  const helperTabId = job.helperTabId;
+  const tabIds = helperTabIds(job);
   const nextJob: JobState = {
     ...job,
     status,
     phase: null,
     helperTabId: null,
+    helperTabIds: [],
     currentUser: null,
+    workers: [],
     updatedAt: Date.now(),
     message
   };
 
-  await saveJobState(nextJob);
-  await closeHelperTab(helperTabId);
+  await flushLastScanCache(true);
+  await persistJob(nextJob);
+  await closeHelperTabs(tabIds);
   return nextJob;
 }
 
@@ -121,161 +266,188 @@ function enrichmentOutcome(result: ProfileActivityResult): UnfollowResultStatus 
 }
 
 async function persistActivityResult(queueUser: QueuedUser, result: ProfileActivityResult) {
-  const last = await loadLastScan();
-  if (!last) return;
-
-  const now = Date.now();
-  const updated = classifyUsers(
-    last.users.map((user) => {
-      if (user.username !== queueUser.username) return user;
-
-      return {
-        ...user,
-        lastActivityISO: result.lastActivityISO,
-        activitySource: result.activitySource,
-        profileState: result.profileState,
-        enrichmentStatus: result.profileState === "unknown" ? "failed" : "done",
-        lastCheckedAt: now,
-        note: result.note,
-        unfollowedAt: user.unfollowedAt ?? null
-      };
-    }),
-    now
-  );
-
-  await saveLastScan(updated, summarize(updated), now);
+  await updateCachedUser(queueUser, (user, now) => ({
+    ...user,
+    lastActivityISO: result.lastActivityISO,
+    activitySource: result.activitySource,
+    profileState: result.profileState,
+    enrichmentStatus: result.profileState === "unknown" ? "failed" : "done",
+    lastCheckedAt: now,
+    note: result.note,
+    unfollowedAt: user.unfollowedAt ?? null
+  }));
 }
 
 async function persistUnfollowResult(queueUser: QueuedUser, result: UnfollowResult) {
-  const last = await loadLastScan();
-  if (!last) return;
+  const updated = await updateCachedUser(queueUser, (user, now) => ({
+    ...user,
+    note: result.note,
+    unfollowedAt: result.status === "success" ? now : user.unfollowedAt ?? null
+  }));
 
-  const now = Date.now();
-  const updated = classifyUsers(
-    last.users.map((user) => {
-      if (user.username !== queueUser.username) return user;
-
-      return {
-        ...user,
-        note: result.note,
-        unfollowedAt: result.status === "success" ? now : user.unfollowedAt ?? null
-      };
-    }),
-    now
-  );
-
-  await saveLastScan(updated, summarize(updated), now);
-
-  const target = updated.find((user) => user.username === queueUser.username);
   const auditEntry: UnfollowAuditEntry = {
     username: queueUser.username,
     displayName: queueUser.displayName,
-    timestamp: now,
+    timestamp: Date.now(),
     status: result.status,
     note: result.note,
-    daysSince: target?.daysSince ?? null
+    daysSince: updated?.daysSince ?? null
   };
 
   await appendUnfollowAudit([auditEntry]);
 }
 
-async function advanceJob(job: JobState, status: UnfollowResultStatus, note: string) {
-  const completed = job.completed + 1;
-  const succeeded = job.succeeded + (status === "success" ? 1 : 0);
-  const failed = job.failed + (status === "failed" ? 1 : 0);
-  const skipped = job.skipped + (status === "skipped" || status === "already_not_following" ? 1 : 0);
+async function advanceWorker(job: JobState, tabId: number, status: UnfollowResultStatus, note: string) {
+  const worker = findWorker(job, tabId);
+  if (!worker) return job;
 
-  if (job.queue.length === 0) {
+  job.completed += 1;
+  if (status === "success") job.succeeded += 1;
+  if (status === "failed") job.failed += 1;
+  if (status === "skipped" || status === "already_not_following") job.skipped += 1;
+
+  worker.note = note;
+  worker.updatedAt = Date.now();
+
+  const nextUser = job.queue.shift() || null;
+  if (nextUser) {
+    worker.currentUser = nextUser;
+    worker.phase = "awaiting_navigation";
+    job.message = `${job.type === "enrich" ? "Opening" : "Reviewing"} @${nextUser.username}. ${note}`;
+
+    await flushLastScanCache(false);
+    await persistJob(job);
+    await navigateHelperTab(worker.tabId, nextUser.profileUrl);
+    return job;
+  }
+
+  worker.currentUser = null;
+  worker.phase = null;
+
+  const remainingWorkers = activeWorkerCount(job);
+  if (remainingWorkers === 0) {
     return finalizeJob(
-      {
-        ...job,
-        completed,
-        succeeded,
-        failed,
-        skipped
-      },
+      job,
       "completed",
-      `${job.type === "enrich" ? "Enrichment" : "Unfollow"} complete. ${completed}/${job.total} processed.`
+      `${job.type === "enrich" ? "Enrichment" : "Unfollow"} complete. ${job.completed}/${job.total} processed using ${job.concurrency || 1} worker${job.concurrency === 1 ? "" : "s"}.`
     );
   }
 
-  const [nextUser, ...rest] = job.queue;
-  const nextJob: JobState = {
-    ...job,
-    phase: "awaiting_navigation",
-    currentUser: nextUser,
-    queue: rest,
-    completed,
-    succeeded,
-    failed,
-    skipped,
-    updatedAt: Date.now(),
-    message: `${job.type === "enrich" ? "Navigating to" : "Opening"} @${nextUser.username}. ${note}`
-  };
+  job.message = `${job.type === "enrich" ? "Enrichment" : "Unfollow"} running. ${job.completed}/${job.total} processed. ${remainingWorkers} worker${remainingWorkers === 1 ? "" : "s"} still active. ${note}`;
 
-  await saveJobState(nextJob);
-  if (!job.helperTabId) throw new Error("Helper tab is no longer available.");
-  await navigateHelperTab(job.helperTabId, nextUser.profileUrl);
-  return nextJob;
+  await flushLastScanCache(false);
+  await persistJob(job);
+  return job;
 }
 
-async function continueJobAfterFailure(job: JobState, error: unknown) {
+async function continueJobAfterFailure(job: JobState, tabId: number, error: unknown) {
   const note = error instanceof Error ? error.message : "Job step failed.";
-  if (!job.currentUser) {
+  const worker = findWorker(job, tabId);
+  if (!worker?.currentUser) {
     await finalizeJob(job, "error", note);
     return;
   }
 
   if (job.type === "enrich") {
-    await persistActivityResult(job.currentUser, {
-      username: job.currentUser.username,
+    await persistActivityResult(worker.currentUser, {
+      username: worker.currentUser.username,
       lastActivityISO: null,
       activitySource: "none",
       profileState: "unknown",
       note
     });
   } else {
-    await persistUnfollowResult(job.currentUser, {
-      username: job.currentUser.username,
+    await persistUnfollowResult(worker.currentUser, {
+      username: worker.currentUser.username,
       status: "failed",
       note
     });
   }
 
-  await advanceJob(job, "failed", note);
+  await advanceWorker(job, tabId, "failed", note);
 }
 
-async function processJob(job: JobState) {
-  if (!job.helperTabId || !job.currentUser) return;
+async function processWorker(job: JobState, tabId: number) {
+  const worker = findWorker(job, tabId);
+  if (!worker?.currentUser) return;
 
-  const processing: JobState = {
-    ...job,
-    phase: "processing",
-    updatedAt: Date.now(),
-    message: `${job.type === "enrich" ? "Checking" : "Reviewing"} @${job.currentUser.username}...`
-  };
+  worker.phase = "processing";
+  worker.updatedAt = Date.now();
 
-  await saveJobState(processing);
-  await chrome.scripting.executeScript({ target: { tabId: job.helperTabId }, files: ["scanner.js"] });
+  const activeWorkers = activeWorkerCount(job);
+  job.message = `${job.type === "enrich" ? "Checking" : "Reviewing"} @${worker.currentUser.username} (${job.completed + 1}/${job.total}) across ${activeWorkers} worker${activeWorkers === 1 ? "" : "s"}.`;
+
+  await persistJob(job);
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["scanner.js"] });
 
   if (job.type === "enrich") {
-    const result = (await chrome.tabs.sendMessage(job.helperTabId, {
+    const result = (await chrome.tabs.sendMessage(tabId, {
       action: "FOLLOWGRAPH_GET_PROFILE_ACTIVITY",
-      username: job.currentUser.username
+      username: worker.currentUser.username
     })) as ProfileActivityResult;
 
-    await persistActivityResult(job.currentUser, result);
-    await advanceJob(processing, enrichmentOutcome(result), result.note || "Activity checked.");
+    await persistActivityResult(worker.currentUser, result);
+    await advanceWorker(job, tabId, enrichmentOutcome(result), result.note || "Activity checked.");
     return;
   }
 
-  const unfollowResult = (await chrome.tabs.sendMessage(job.helperTabId, {
+  const result = (await chrome.tabs.sendMessage(tabId, {
     action: "FOLLOWGRAPH_UNFOLLOW_CURRENT_PROFILE",
-    username: job.currentUser.username
+    username: worker.currentUser.username
   })) as UnfollowResult;
 
-  await persistUnfollowResult(job.currentUser, unfollowResult);
-  await advanceJob(processing, unfollowResult.status, unfollowResult.note);
+  await persistUnfollowResult(worker.currentUser, result);
+  await advanceWorker(job, tabId, result.status, result.note);
+}
+
+async function startJob(type: JobType, queue: QueuedUser[], thresholdMessage: string) {
+  const workerCount = resolveWorkerCount(type, queue.length);
+  const tabIds = await Promise.all(Array.from({ length: workerCount }, () => ensureHelperTab()));
+  const workers = tabIds.map<JobWorkerState>((tabId) => ({
+    tabId,
+    phase: null,
+    currentUser: null,
+    updatedAt: Date.now(),
+    note: null
+  }));
+
+  const pending = [...queue];
+  const initialTargets: Array<{ tabId: number; url: string }> = [];
+
+  for (const worker of workers) {
+    const nextUser = pending.shift();
+    if (!nextUser) break;
+    worker.currentUser = nextUser;
+    worker.phase = "awaiting_navigation";
+    initialTargets.push({ tabId: worker.tabId, url: nextUser.profileUrl });
+  }
+
+  const job: JobState = {
+    id: createId(),
+    type,
+    status: "running",
+    phase: null,
+    helperTabId: null,
+    helperTabIds: [],
+    currentUser: null,
+    workers,
+    queue: pending,
+    total: queue.length,
+    completed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    message: thresholdMessage,
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+    thresholdDays: 30,
+    batchLimit: queue.length,
+    concurrency: workers.length
+  };
+
+  await persistJob(job);
+  await Promise.all(initialTargets.map((target) => navigateHelperTab(target.tabId, target.url)));
+  return job;
 }
 
 async function startEnrichment(limit?: number) {
@@ -289,43 +461,27 @@ async function startEnrichment(limit?: number) {
     return { ok: false, message: "Run a following scan first." };
   }
 
+  lastScanCache = buildLastScanCache(last);
+
   const effectiveLimit = resolveEnrichmentLimit(limit, last.users.length);
   const queue = buildEnrichmentQueue(last.users, effectiveLimit);
   if (queue.length === 0) {
     return { ok: false, message: "No profiles require enrichment." };
   }
 
-  const helperTabId = await ensureHelperTab();
-  const [currentUser, ...rest] = queue;
+  const concurrency = resolveWorkerCount("enrich", queue.length);
+  await startJob(
+    "enrich",
+    queue,
+    `Opening ${Math.min(concurrency, queue.length)} helper tabs for ${queue.length} profile activity checks.`
+  );
 
-  const job: JobState = {
-    id: createId(),
-    type: "enrich",
-    status: "running",
-    phase: "awaiting_navigation",
-    helperTabId,
-    currentUser,
-    queue: rest,
-    total: queue.length,
-    completed: 0,
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    message: `Opening @${currentUser.username}...`,
-    startedAt: Date.now(),
-    updatedAt: Date.now(),
-    thresholdDays: 30,
-    batchLimit: queue.length
-  };
-
-  await saveJobState(job);
-  await navigateHelperTab(helperTabId, currentUser.profileUrl);
   return {
     ok: true,
     message:
       effectiveLimit >= last.users.length
-        ? `Resolving activity for all ${queue.length} accounts in a helper tab.`
-        : `Resolving activity for ${queue.length} accounts in a helper tab.`
+        ? `Resolving activity for all ${queue.length} accounts across ${concurrency} helper tabs.`
+        : `Resolving activity for ${queue.length} accounts across ${concurrency} helper tabs.`
   };
 }
 
@@ -340,36 +496,14 @@ async function startUnfollow(usernames: string[], limit: number) {
     return { ok: false, message: "Run and enrich a scan first." };
   }
 
+  lastScanCache = buildLastScanCache(last);
+
   const queue = buildUnfollowQueue(last.users, usernames, clamp(limit || 25, 1, 50));
   if (queue.length === 0) {
     return { ok: false, message: "Only enriched accounts inactive for more than 30 days can be unfollowed." };
   }
 
-  const helperTabId = await ensureHelperTab();
-  const [currentUser, ...rest] = queue;
-
-  const job: JobState = {
-    id: createId(),
-    type: "unfollow",
-    status: "running",
-    phase: "awaiting_navigation",
-    helperTabId,
-    currentUser,
-    queue: rest,
-    total: queue.length,
-    completed: 0,
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    message: `Opening @${currentUser.username}...`,
-    startedAt: Date.now(),
-    updatedAt: Date.now(),
-    thresholdDays: 30,
-    batchLimit: queue.length
-  };
-
-  await saveJobState(job);
-  await navigateHelperTab(helperTabId, currentUser.profileUrl);
+  await startJob("unfollow", queue, `Starting unfollow review for ${queue.length} accounts.`);
   return { ok: true, message: `Starting unfollow review for ${queue.length} accounts.` };
 }
 
@@ -398,11 +532,11 @@ chrome.runtime.onMessage.addListener(
     const handle = async () => {
       switch (msg.action) {
         case "FOLLOWGRAPH_START_ENRICHMENT":
-          return startEnrichment(msg.limit);
+          return runSerialized(() => startEnrichment(msg.limit));
         case "FOLLOWGRAPH_START_UNFOLLOW":
-          return startUnfollow(msg.usernames || [], msg.limit || 25);
+          return runSerialized(() => startUnfollow(msg.usernames || [], msg.limit || 25));
         case "FOLLOWGRAPH_CANCEL_JOB":
-          return cancelJob();
+          return runSerialized(() => cancelJob());
         case "FOLLOWGRAPH_GET_JOB_STATE":
           return loadJobState();
         default:
@@ -423,27 +557,67 @@ chrome.runtime.onMessage.addListener(
 chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: { status?: string }) => {
   if (changeInfo.status !== "complete") return;
 
-  void (async () => {
+  void runSerialized(async () => {
     const job = await loadJobState();
-    if (!job || job.status !== "running" || job.helperTabId !== tabId || job.phase !== "awaiting_navigation") return;
-    if (!(await helperTabMatchesCurrentUser(tabId, job.currentUser))) return;
+    if (!job || job.status !== "running") return;
+
+    const worker = findWorker(job, tabId);
+    if (!worker || worker.phase !== "awaiting_navigation") return;
+    if (!(await helperTabMatchesCurrentUser(tabId, worker.currentUser))) return;
 
     try {
-      await processJob(job);
+      await processWorker(job, tabId);
     } catch (error) {
-      await continueJobAfterFailure(job, error);
+      await continueJobAfterFailure(job, tabId, error);
     }
-  })();
+  });
 });
 
 chrome.tabs.onRemoved.addListener((tabId: number) => {
-  void (async () => {
+  void runSerialized(async () => {
     const job = await loadJobState();
-    if (!job || job.status !== "running" || job.helperTabId !== tabId) return;
-    await finalizeJob(
-      job,
-      "error",
-      `${job.type === "enrich" ? "Enrichment" : "Unfollow"} stopped because the helper tab was closed.`
-    );
-  })();
+    if (!job || job.status !== "running") return;
+
+    const workers = ensureWorkers(job);
+    const index = workers.findIndex((worker) => worker.tabId === tabId);
+    if (index === -1) return;
+
+    const [removedWorker] = workers.splice(index, 1);
+    job.concurrency = workers.length || job.concurrency || 1;
+
+    if (removedWorker.currentUser) {
+      const note = `${job.type === "enrich" ? "Enrichment" : "Unfollow"} helper tab was closed while processing @${removedWorker.currentUser.username}.`;
+      if (job.type === "enrich") {
+        await persistActivityResult(removedWorker.currentUser, {
+          username: removedWorker.currentUser.username,
+          lastActivityISO: null,
+          activitySource: "none",
+          profileState: "unknown",
+          note
+        });
+      } else {
+        await persistUnfollowResult(removedWorker.currentUser, {
+          username: removedWorker.currentUser.username,
+          status: "failed",
+          note
+        });
+      }
+
+      job.completed += 1;
+      job.failed += 1;
+    }
+
+    if (workers.length === 0) {
+      await finalizeJob(
+        job,
+        "error",
+        `${job.type === "enrich" ? "Enrichment" : "Unfollow"} stopped because all helper tabs were closed.`
+      );
+      return;
+    }
+
+    job.message = `${job.type === "enrich" ? "Enrichment" : "Unfollow"} continuing with ${workers.length} helper tab${workers.length === 1 ? "" : "s"}.`;
+    await flushLastScanCache(false);
+    await persistJob(job);
+  });
 });

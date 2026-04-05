@@ -60,13 +60,23 @@ export type JobType = "enrich" | "unfollow";
 export type JobStatus = "running" | "completed" | "error" | "cancelled";
 export type JobPhase = "awaiting_navigation" | "processing";
 
+export interface JobWorkerState {
+  tabId: number;
+  phase: JobPhase | null;
+  currentUser: QueuedUser | null;
+  updatedAt: number;
+  note?: string | null;
+}
+
 export interface JobState {
   id: string;
   type: JobType;
   status: JobStatus;
   phase: JobPhase | null;
   helperTabId: number | null;
+  helperTabIds?: number[];
   currentUser: QueuedUser | null;
+  workers?: JobWorkerState[];
   queue: QueuedUser[];
   total: number;
   completed: number;
@@ -78,6 +88,7 @@ export interface JobState {
   updatedAt: number;
   thresholdDays: number;
   batchLimit: number;
+  concurrency?: number;
 }
 
 export interface ProfileActivityResult {

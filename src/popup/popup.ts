@@ -93,7 +93,7 @@ function formatActivitySummary(last: LastScan) {
   ];
 
   if (summary.Resolved === 0 && summary.total > 0) {
-    lines.push("Scan now auto-starts profile enrichment in a helper tab.");
+    lines.push("Scan now auto-starts parallel profile enrichment in helper tabs.");
   }
 
   return lines.join("\n");
@@ -220,11 +220,21 @@ function formatJob(job: JobState | null) {
     return "No active job.";
   }
 
+  const workers = job.workers ?? [];
+  const activeWorkers = workers.filter((worker) => worker.currentUser).length;
+  const workerSummary =
+    workers.length > 0 ? `Workers: ${activeWorkers}/${workers.length} active` : job.concurrency ? `Workers: ${job.concurrency}` : "";
+  const currentHandles = workers
+    .filter((worker) => worker.currentUser)
+    .slice(0, 3)
+    .map((worker) => `@${worker.currentUser?.username}`);
+
   return [
     `${job.type === "enrich" ? "Enrichment" : "Unfollow"} | ${job.status}`,
     `Progress: ${job.completed}/${job.total}`,
     `Succeeded: ${job.succeeded} | Failed: ${job.failed} | Skipped: ${job.skipped}`,
-    job.currentUser ? `Current: @${job.currentUser.username}` : "",
+    workerSummary,
+    currentHandles.length > 0 ? `Current: ${currentHandles.join(", ")}${activeWorkers > currentHandles.length ? ", ..." : ""}` : "",
     job.message
   ]
     .filter(Boolean)
