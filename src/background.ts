@@ -13,9 +13,9 @@ import type {
 import { classifyUsers, summarize } from "./activity";
 import { appendUnfollowAudit, loadJobState, loadLastScan, saveJobState, saveLastScan } from "./storage";
 
-const ENRICHMENT_DEFAULT_WORKERS = 10;
-const ENRICHMENT_MAX_WORKERS = 12;
-const ENRICHMENT_FLUSH_BATCH_SIZE = 20;
+const ENRICHMENT_DEFAULT_WORKERS = 15;
+const ENRICHMENT_MAX_WORKERS = 20;
+const ENRICHMENT_FLUSH_BATCH_SIZE = 50;
 
 type LastScanCache = {
   users: ClassifiedUser[];
@@ -367,9 +367,12 @@ async function continueJobAfterFailure(job: JobState, tabId: number, error: unkn
   await advanceWorker(job, tabId, "failed", note);
 }
 
-async function processWorker(job: JobState, tabId: number) {
+async function beginProcessWorker(
+  job: JobState,
+  tabId: number
+): Promise<{ jobType: JobType; currentUser: QueuedUser } | null> {
   const worker = findWorker(job, tabId);
-  if (!worker?.currentUser) return;
+  if (!worker?.currentUser) return null;
 
   worker.phase = "processing";
   worker.updatedAt = Date.now();
@@ -378,26 +381,57 @@ async function processWorker(job: JobState, tabId: number) {
   job.message = `${job.type === "enrich" ? "Checking" : "Reviewing"} @${worker.currentUser.username} (${job.completed + 1}/${job.total}) across ${activeWorkers} worker${activeWorkers === 1 ? "" : "s"}.`;
 
   await persistJob(job);
-  await chrome.scripting.executeScript({ target: { tabId }, files: ["scanner.js"] });
+  return { jobType: job.type, currentUser: worker.currentUser };
+}
 
-  if (job.type === "enrich") {
-    const result = (await chrome.tabs.sendMessage(tabId, {
-      action: "FOLLOWGRAPH_GET_PROFILE_ACTIVITY",
-      username: worker.currentUser.username
-    })) as ProfileActivityResult;
+async function completeProcessWorker(
+  tabId: number,
+  jobType: JobType,
+  currentUser: QueuedUser,
+  result: ProfileActivityResult | UnfollowResult
+): Promise<void> {
+  const job = await loadJobState();
+  if (!job || job.status !== "running") return;
 
-    await persistActivityResult(worker.currentUser, result);
-    await advanceWorker(job, tabId, enrichmentOutcome(result), result.note || "Activity checked.");
-    return;
+  if (jobType === "enrich") {
+    const r = result as ProfileActivityResult;
+    await persistActivityResult(currentUser, r);
+    await advanceWorker(job, tabId, enrichmentOutcome(r), r.note || "Activity checked.");
+  } else {
+    const r = result as UnfollowResult;
+    await persistUnfollowResult(currentUser, r);
+    await advanceWorker(job, tabId, r.status, r.note);
+  }
+}
+
+async function failProcessWorker(
+  tabId: number,
+  jobType: JobType,
+  currentUser: QueuedUser,
+  error: unknown
+): Promise<void> {
+  const job = await loadJobState();
+  if (!job || job.status !== "running") return;
+
+  const note = error instanceof Error ? error.message : "Job step failed.";
+
+  if (jobType === "enrich") {
+    await persistActivityResult(currentUser, {
+      username: currentUser.username,
+      lastActivityISO: null,
+      activitySource: "none",
+      profileState: "unknown",
+      note
+    });
+  } else {
+    await persistUnfollowResult(currentUser, {
+      username: currentUser.username,
+      status: "failed",
+      note
+    });
   }
 
-  const result = (await chrome.tabs.sendMessage(tabId, {
-    action: "FOLLOWGRAPH_UNFOLLOW_CURRENT_PROFILE",
-    username: worker.currentUser.username
-  })) as UnfollowResult;
-
-  await persistUnfollowResult(worker.currentUser, result);
-  await advanceWorker(job, tabId, result.status, result.note);
+  await advanceWorker(job, tabId, "failed", note);
 }
 
 async function startJob(type: JobType, queue: QueuedUser[], thresholdMessage: string) {
@@ -557,20 +591,46 @@ chrome.runtime.onMessage.addListener(
 chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: { status?: string }) => {
   if (changeInfo.status !== "complete") return;
 
-  void runSerialized(async () => {
-    const job = await loadJobState();
-    if (!job || job.status !== "running") return;
+  void (async () => {
+    // Phase 1 (serialized, fast): validate state and transition worker to "processing"
+    const context = await runSerialized(async () => {
+      const job = await loadJobState();
+      if (!job || job.status !== "running") return null;
 
-    const worker = findWorker(job, tabId);
-    if (!worker || worker.phase !== "awaiting_navigation") return;
-    if (!(await helperTabMatchesCurrentUser(tabId, worker.currentUser))) return;
+      const worker = findWorker(job, tabId);
+      if (!worker || worker.phase !== "awaiting_navigation") return null;
+      if (!(await helperTabMatchesCurrentUser(tabId, worker.currentUser))) return null;
 
+      return beginProcessWorker(job, tabId);
+    });
+
+    if (!context) return;
+
+    // Phase 2 (NOT serialized, slow): inject scanner and extract profile data
+    // Multiple workers execute this phase concurrently.
     try {
-      await processWorker(job, tabId);
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["scanner.js"] });
+
+      let result: ProfileActivityResult | UnfollowResult;
+      if (context.jobType === "enrich") {
+        result = (await chrome.tabs.sendMessage(tabId, {
+          action: "FOLLOWGRAPH_GET_PROFILE_ACTIVITY",
+          username: context.currentUser.username
+        })) as ProfileActivityResult;
+      } else {
+        result = (await chrome.tabs.sendMessage(tabId, {
+          action: "FOLLOWGRAPH_UNFOLLOW_CURRENT_PROFILE",
+          username: context.currentUser.username
+        })) as UnfollowResult;
+      }
+
+      // Phase 3 (serialized, fast): persist result and advance worker
+      await runSerialized(() => completeProcessWorker(tabId, context.jobType, context.currentUser, result));
     } catch (error) {
-      await continueJobAfterFailure(job, tabId, error);
+      // Phase 3 error path (serialized, fast)
+      await runSerialized(() => failProcessWorker(tabId, context.jobType, context.currentUser, error));
     }
-  });
+  })();
 });
 
 chrome.tabs.onRemoved.addListener((tabId: number) => {

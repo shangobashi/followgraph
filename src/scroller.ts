@@ -49,12 +49,12 @@ export async function runScrollLoop(opts: {
   const hardCapRounds = opts.hardCapRounds ?? 2000;
   const maxUsers = opts.maxUsers ?? 25000;
 
-  const pauseEveryN = opts.pauseEveryN ?? 55;
-  const pauseDurationMs = opts.pauseDurationMs ?? 1800;
+  const pauseEveryN = opts.pauseEveryN ?? 100;
+  const pauseDurationMs = opts.pauseDurationMs ?? 800;
 
-  const minDelay = 650;
-  const maxDelay = 1600;
-  let settleMs = clamp(opts.settleMsInitial ?? 900, minDelay, maxDelay);
+  const minDelay = 300;
+  const maxDelay = 700;
+  let settleMs = clamp(opts.settleMsInitial ?? 400, minDelay, maxDelay);
 
   const container = getScrollContainer();
 
@@ -81,7 +81,7 @@ export async function runScrollLoop(opts: {
   observer.observe(document.body, { childList: true, subtree: true });
 
   try {
-    await sleep(400);
+    await sleep(200);
 
     while (idleRounds < maxIdleRounds && rounds < hardCapRounds) {
       const elapsedMs = performance.now() - startedAt;
@@ -107,7 +107,7 @@ export async function runScrollLoop(opts: {
         (container as Element).scrollBy({ top: scrollStepPx, left: 0, behavior: "instant" as ScrollBehavior });
       }
 
-      const jitter = settleMs + (Math.random() * 260 - 130);
+      const jitter = settleMs + (Math.random() * 100 - 50);
       await sleep(clamp(jitter, minDelay, maxDelay));
 
       if (pauseEveryN > 0 && rounds % pauseEveryN === 0) {
@@ -117,7 +117,7 @@ export async function runScrollLoop(opts: {
       const currentCount = countUserCells();
       const progressed = newContentSinceLastRound || currentCount > lastCount;
 
-      settleMs = progressed ? clamp(settleMs - 60, minDelay, maxDelay) : clamp(settleMs + 120, minDelay, maxDelay);
+      settleMs = progressed ? clamp(settleMs - 25, minDelay, maxDelay) : clamp(settleMs + 50, minDelay, maxDelay);
 
       if (progressed) {
         idleRounds = 0;

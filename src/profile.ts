@@ -33,7 +33,7 @@ function hasTerminalProfileState(text: string) {
   );
 }
 
-async function waitForSignal(timeoutMs = 3500) {
+async function waitForSignal(timeoutMs = 1800) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
@@ -44,7 +44,7 @@ async function waitForSignal(timeoutMs = 3500) {
       return;
     }
 
-    await sleep(150);
+    await sleep(80);
   }
 }
 
@@ -140,7 +140,7 @@ export async function extractProfileActivity(expectedUsername?: string): Promise
   }
 
   // Give slower profiles one shorter second pass without reverting to the old 12s ceiling.
-  await waitForSignal(3500);
+  await waitForSignal(1800);
   text = pageText();
   latestTime = findLatestTimelineTime();
 
