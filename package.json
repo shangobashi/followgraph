@@ -2,7 +2,7 @@
   "name": "followgraph",
   "private": true,
   "version": "1.2.0",
-  "description": "FollowGraph v1.1: client-side Following Exporter for X/Twitter with parallel activity resolution",
+  "description": "FollowGraph v1.2: client-side Following Exporter for X/Twitter with parallel activity resolution",
   "author": "Shango Bashi",
   "type": "module",
   "scripts": {

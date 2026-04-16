@@ -1,6 +1,6 @@
-# FollowGraph v1.1
+# FollowGraph v1.2
 
-A privacy-first, client-side Chrome/Edge extension that scans your X/Twitter **Following** page, exports your following list, and resolves profile activity locally with the v1.1 parallel enrichment pipeline.
+A privacy-first, client-side Chrome/Edge extension that scans your X/Twitter **Following** page, exports your following list, and resolves profile activity locally with the v1.2 parallel enrichment pipeline.
 
 ## Why it works (when others fail)
 X uses a **virtualized React list**: off-screen accounts are unmounted from the DOM.
@@ -31,13 +31,13 @@ Load:
 
 1. Open: `https://x.com/<you>/following` or `https://twitter.com/<you>/following`
 2. Click extension icon -> **Scan Following**
-3. Let v1.1 stream the list, then fan out activity checks across helper tabs
+3. Let v1.2 stream the list, then fan out activity checks across helper tabs
 4. Export JSON/CSV
 
 ## Notes
 
 * No servers, no tracking, no OAuth.
-* v1.1 is tuned to cut large enrichment jobs down from multi-day serial runs to same-session processing.
+* v1.2 is tuned to cut large enrichment jobs down from multi-day serial runs to same-session processing.
 * DOM changes on X can break selectors; file an issue with screenshots/HTML if it does.
 
 MIT Licensed. Made by Shango Bashi.

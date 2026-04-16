@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="FollowGraph v1.1 is a privacy-first browser extension that exports your X/Twitter following graph and resolves profile activity with a parallel local pipeline."
+      content="FollowGraph v1.2 is a privacy-first browser extension that exports your X/Twitter following graph and resolves profile activity with a parallel local pipeline."
     />
     <meta name="theme-color" content="#07111d" />
-    <title>FollowGraph v1.1</title>
+    <title>FollowGraph v1.2</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -30,7 +30,7 @@
         <span class="brand-word">FollowGraph</span>
       </a>
       <div class="topbar-actions">
-        <span class="micro-pill">v1.1</span>
+        <span class="micro-pill">v1.2</span>
         <span class="micro-pill">Client-side only</span>
         <span class="micro-pill">Chrome + Edge</span>
         <a
@@ -50,10 +50,10 @@
           <p class="eyebrow">Made by Shango Bashi</p>
           <h1 class="hero-title">
             <span class="title-line"><span>Export your following graph</span></span>
-            <span class="title-line accent-line"><span>with the v1.1 fast path.</span></span>
+            <span class="title-line accent-line"><span>with the v1.2 fast path.</span></span>
           </h1>
           <p class="lede">
-            FollowGraph v1.1 streams users out of X's virtualized Following list while it scrolls, then resolves
+            FollowGraph v1.2 streams users out of X's virtualized Following list while it scrolls, then resolves
             profile activity through parallel helper tabs and batched local persistence so large runs finish in the
             same session instead of dragging into multi-day serial processing.
           </p>
@@ -135,7 +135,7 @@
             <div class="scan-foot">
               <div class="foot-row">
                 <span>Stream-safe for React virtualization</span>
-                <span>v1.1 parallel enrichment loop</span>
+                <span>v1.2 parallel enrichment loop</span>
               </div>
               <div class="scan-track" aria-hidden="true"><span></span></div>
             </div>
@@ -152,7 +152,7 @@
           <h2>Built for X's virtualized list, not for a fantasy DOM.</h2>
           <p>
             Most scrapers wait until scrolling ends. FollowGraph extracts during the scroll loop, dedupes in memory,
-            and in v1.1 fans profile checks out across helper tabs while batching local writes so the browser stops
+            and in v1.2 fans profile checks out across helper tabs while batching local writes so the browser stops
             doing full-dataset work for every single account.
           </p>
           <div class="tag-row">
@@ -164,7 +164,7 @@
         </article>
 
         <article class="panel panel-stat" data-reveal>
-          <p class="tiny-label">v1.1 throughput</p>
+          <p class="tiny-label">v1.2 throughput</p>
           <strong>Serial enrichment is gone.</strong>
           <span>Large runs now spread activity checks across helper tabs instead of waiting on one profile at a time.</span>
         </article>
@@ -184,7 +184,7 @@
         <article class="panel panel-memory" data-reveal>
           <p class="tiny-label">Operator UX</p>
           <strong>The popup remembers the last scan and now surfaces worker progress.</strong>
-          <span>Open the extension, relaunch a scan, or watch the v1.1 resolver pool move through the queue.</span>
+          <span>Open the extension, relaunch a scan, or watch the v1.2 resolver pool move through the queue.</span>
         </article>
       </section>
 
@@ -209,7 +209,7 @@
 
           <article class="step">
             <span class="step-index">03</span>
-            <h3>Let v1.1 resolve activity in parallel.</h3>
+            <h3>Let v1.2 resolve activity in parallel.</h3>
             <p>As soon as the list is captured, FollowGraph spreads profile checks across helper tabs and keeps the local snapshot updated in batches.</p>
           </article>
         </div>
@@ -255,10 +255,10 @@
       <div class="modal-backdrop" data-close-install></div>
       <section class="install-modal" role="dialog" aria-modal="true" aria-labelledby="installModalTitle">
         <button class="modal-close" type="button" data-close-install aria-label="Close install instructions">Close</button>
-        <p class="section-label">Install FollowGraph v1.1</p>
+        <p class="section-label">Install FollowGraph v1.2</p>
         <h2 id="installModalTitle">A polished install path for both non-devs and developers.</h2>
         <p class="modal-lede">
-          The fastest route is the prebuilt zip. No npm, no local build, no terminal. v1.1 ships the faster parallel
+          The fastest route is the prebuilt zip. No npm, no local build, no terminal. v1.2 ships the faster parallel
           enrichment pipeline by default, and the GitHub path stays available if you want to inspect or modify it.
         </p>
 
