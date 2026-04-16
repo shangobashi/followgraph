@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FollowGraph",
-  "version": "1.1.0",
-  "version_name": "v1.1",
+  "version": "1.2.0",
+  "version_name": "v1.2",
   "description": "FollowGraph v1.1. Client-side Following Exporter for X/Twitter with parallel activity resolution.",
   "author": "Shango Bashi",
   "permissions": ["scripting", "activeTab", "storage", "tabs"],
