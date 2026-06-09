@@ -1,6 +1,7 @@
 import type { LastScan, Progress, ScanSummary } from "./types";
 import { classifyUsers, summarize } from "./activity";
 import { runApiFastPathEnrichment } from "./fastpath";
+import { parseFollowingApiUsers } from "./followingApi";
 import { parseVisibleUsers } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
 import { UserStore } from "./store";
@@ -66,12 +67,33 @@ async function runScan() {
 
   const store = new UserStore();
   let extractedTotal = 0;
+  let apiHarvestRunning = false;
+
+  function updateExtractedTotal() {
+    extractedTotal = store.size();
+  }
+
+  function harvestApiUsers() {
+    if (apiHarvestRunning) return;
+    apiHarvestRunning = true;
+    void parseFollowingApiUsers()
+      .then((users) => {
+        if (users.length === 0) return;
+        store.add(users);
+        updateExtractedTotal();
+      })
+      .catch(() => {})
+      .finally(() => {
+        apiHarvestRunning = false;
+      });
+  }
 
   const result = await runScrollLoop({
     onTick: (tick) => {
       const visible = parseVisibleUsers();
       store.add(visible);
-      extractedTotal = store.size();
+      updateExtractedTotal();
+      harvestApiUsers();
 
       const progress: Progress = {
         ...tick,
@@ -82,6 +104,12 @@ async function runScan() {
       uiSetStatus(tick.progressed ? "Scanning..." : "Scanning (waiting for load)...");
     }
   });
+
+  const finalApiUsers = await parseFollowingApiUsers().catch(() => []);
+  if (finalApiUsers.length > 0) {
+    store.add(finalApiUsers);
+    updateExtractedTotal();
+  }
 
   uiSetFinalStatus(result.reason);
 
