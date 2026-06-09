@@ -2,7 +2,7 @@ import type { ClassifiedUser, Progress, ScanSummary, StopReason } from "./types"
 import { downloadCsv, downloadJson, toCSV } from "./exporter";
 
 const PANEL_ID = "followgraph-root";
-const VERSION = "v1.2.0";
+const VERSION = "v1.3.0";
 const BRAND = "Made by Shango Bashi";
 const GITHUB_URL = "https://github.com/shangobashi/followgraph";
 

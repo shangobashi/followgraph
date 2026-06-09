@@ -93,7 +93,7 @@ function formatActivitySummary(last: LastScan) {
   ];
 
   if (summary.Resolved === 0 && summary.total > 0) {
-    lines.push("Scan now auto-starts parallel profile enrichment in helper tabs.");
+    lines.push("Scan now auto-starts API fast-path enrichment, with helper tabs as fallback.");
   }
 
   return lines.join("\n");
@@ -233,6 +233,9 @@ function formatJob(job: JobState | null) {
     `${job.type === "enrich" ? "Enrichment" : "Unfollow"} | ${job.status}`,
     `Progress: ${job.completed}/${job.total}`,
     `Succeeded: ${job.succeeded} | Failed: ${job.failed} | Skipped: ${job.skipped}`,
+    job.telemetry
+      ? `Fast path: ${job.telemetry.apiResolved ?? 0} API | ${job.telemetry.domResolved ?? 0} DOM | ${Math.round(job.telemetry.profilesPerMinute ?? 0)} profiles/min`
+      : "",
     workerSummary,
     currentHandles.length > 0 ? `Current: ${currentHandles.join(", ")}${activeWorkers > currentHandles.length ? ", ..." : ""}` : "",
     job.message

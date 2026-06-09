@@ -208,6 +208,19 @@ function activeWorkerCount(job: JobState) {
   return ensureWorkers(job).filter((worker) => worker.currentUser).length;
 }
 
+function updateJobTelemetry(job: JobState, result: ProfileActivityResult) {
+  job.telemetry = job.telemetry ?? {};
+  if (result.activitySource === "apiTimeline") {
+    job.telemetry.apiResolved = (job.telemetry.apiResolved ?? 0) + 1;
+  } else if (result.profileState !== "unknown") {
+    job.telemetry.domResolved = (job.telemetry.domResolved ?? 0) + 1;
+  } else {
+    job.telemetry.failed = (job.telemetry.failed ?? 0) + 1;
+  }
+
+  job.telemetry.profilesPerMinute = (job.completed + 1) / Math.max((Date.now() - job.startedAt) / 60000, 1 / 60);
+}
+
 function helperTabIds(job: JobState) {
   return ensureWorkers(job).map((worker) => worker.tabId);
 }
@@ -395,6 +408,7 @@ async function completeProcessWorker(
 
   if (jobType === "enrich") {
     const r = result as ProfileActivityResult;
+    updateJobTelemetry(job, r);
     await persistActivityResult(currentUser, r);
     await advanceWorker(job, tabId, enrichmentOutcome(r), r.note || "Activity checked.");
   } else {
@@ -476,7 +490,14 @@ async function startJob(type: JobType, queue: QueuedUser[], thresholdMessage: st
     updatedAt: Date.now(),
     thresholdDays: 30,
     batchLimit: queue.length,
-    concurrency: workers.length
+    concurrency: workers.length,
+    telemetry: {
+      apiResolved: 0,
+      domResolved: 0,
+      failed: 0,
+      rateLimited: 0,
+      profilesPerMinute: 0
+    }
   };
 
   await persistJob(job);

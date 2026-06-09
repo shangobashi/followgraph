@@ -1,4 +1,5 @@
 import type { ProfileActivityResult, UnfollowResult } from "./types";
+import { resolveProfileActivityViaXApi } from "./xapi";
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -79,6 +80,11 @@ async function waitFor<T>(factory: () => T | null | undefined, timeoutMs = 5000)
 }
 
 export async function extractProfileActivity(expectedUsername?: string): Promise<ProfileActivityResult> {
+  const apiResult = await resolveProfileActivityViaXApi(expectedUsername || currentUsername("")).catch(() => null);
+  if (apiResult && apiResult.profileState !== "unknown") {
+    return apiResult;
+  }
+
   await waitForSignal();
 
   const username = currentUsername(expectedUsername || "");

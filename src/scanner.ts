@@ -1,5 +1,6 @@
 import type { LastScan, Progress, ScanSummary } from "./types";
 import { classifyUsers, summarize } from "./activity";
+import { runApiFastPathEnrichment } from "./fastpath";
 import { parseVisibleUsers } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
 import { UserStore } from "./store";
@@ -94,6 +95,30 @@ async function runScan() {
   window.__FOLLOWGRAPH_SCAN_COMPLETE__ = true;
 
   uiSetStatus("Scan complete. Starting activity enrichment...");
+
+  const fastPath = await runApiFastPathEnrichment(users, summary, {
+    onProgress: (message, nextSummary) => {
+      uiSetSummary(nextSummary);
+      uiSetStatus(message);
+    }
+  }).catch((error: unknown) => {
+    console.warn("FollowGraph API fast path unavailable.", error);
+    return null;
+  });
+
+  if (fastPath && fastPath.resolved > 0) {
+    uiSetSummary(fastPath.summary);
+    uiEnableExport(fastPath.users);
+    uiSetStatus(
+      `API fast path resolved ${fastPath.resolved}/${fastPath.attempted} profiles. ${
+        fastPath.shouldFallback ? "Starting helper-tab fallback for unresolved profiles..." : "Activity enrichment complete."
+      }`
+    );
+
+    if (!fastPath.shouldFallback) {
+      return;
+    }
+  }
 
   const enrichment = await chrome.runtime
     .sendMessage({ action: "FOLLOWGRAPH_START_ENRICHMENT", limit: 0 })

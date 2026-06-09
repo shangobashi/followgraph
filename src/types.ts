@@ -1,5 +1,5 @@
 export type ActivityCategory = "Active" | "Dormant" | "Inactive" | "Unknown";
-export type ActivitySource = "followingCard" | "profileTimeline" | "none";
+export type ActivitySource = "followingCard" | "apiTimeline" | "profileTimeline" | "none";
 export type ProfileState = "posts" | "noPosts" | "protected" | "suspended" | "unavailable" | "unknown";
 export type EnrichmentStatus = "not_started" | "done" | "failed";
 
@@ -89,6 +89,13 @@ export interface JobState {
   thresholdDays: number;
   batchLimit: number;
   concurrency?: number;
+  telemetry?: {
+    apiResolved?: number;
+    domResolved?: number;
+    failed?: number;
+    rateLimited?: number;
+    profilesPerMinute?: number;
+  };
 }
 
 export interface ProfileActivityResult {

@@ -44,17 +44,17 @@ export async function runScrollLoop(opts: {
   pauseEveryN?: number;
   pauseDurationMs?: number;
 }): Promise<{ reason: StopReason; rounds: number; elapsedMs: number; visibleCells: number }> {
-  const scrollStepPx = opts.scrollStepPx ?? 1400;
-  const maxIdleRounds = opts.maxIdleRounds ?? 7;
+  const scrollStepPx = opts.scrollStepPx ?? 2400;
+  const maxIdleRounds = opts.maxIdleRounds ?? 9;
   const hardCapRounds = opts.hardCapRounds ?? 2000;
   const maxUsers = opts.maxUsers ?? 25000;
 
-  const pauseEveryN = opts.pauseEveryN ?? 100;
-  const pauseDurationMs = opts.pauseDurationMs ?? 800;
+  const pauseEveryN = opts.pauseEveryN ?? 160;
+  const pauseDurationMs = opts.pauseDurationMs ?? 450;
 
-  const minDelay = 300;
-  const maxDelay = 700;
-  let settleMs = clamp(opts.settleMsInitial ?? 400, minDelay, maxDelay);
+  const minDelay = 140;
+  const maxDelay = 420;
+  let settleMs = clamp(opts.settleMsInitial ?? 220, minDelay, maxDelay);
 
   const container = getScrollContainer();
 
@@ -117,7 +117,7 @@ export async function runScrollLoop(opts: {
       const currentCount = countUserCells();
       const progressed = newContentSinceLastRound || currentCount > lastCount;
 
-      settleMs = progressed ? clamp(settleMs - 25, minDelay, maxDelay) : clamp(settleMs + 50, minDelay, maxDelay);
+      settleMs = progressed ? clamp(settleMs - 35, minDelay, maxDelay) : clamp(settleMs + 70, minDelay, maxDelay);
 
       if (progressed) {
         idleRounds = 0;
