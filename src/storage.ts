@@ -1,4 +1,5 @@
 import type { ClassifiedUser, JobState, LastScan, ScanSummary, UnfollowAuditEntry } from "./types";
+import { buildScanReport } from "./report";
 
 export const LAST_SCAN_KEY = "followgraph:lastScan";
 export const JOB_KEY = "followgraph:job";
@@ -8,7 +9,8 @@ export async function saveLastScan(users: ClassifiedUser[], summary: ScanSummary
   const payload: LastScan = {
     timestamp,
     users,
-    summary
+    summary,
+    report: buildScanReport(users, summary, timestamp)
   };
   await chrome.storage.local.set({ [LAST_SCAN_KEY]: payload });
 }

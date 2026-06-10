@@ -86,11 +86,13 @@ function formatLastScan(last: LastScan) {
 
 function formatActivitySummary(last: LastScan) {
   const summary = last.summary;
+  const report = last.report;
   const lines = [
     `Resolved profiles: ${summary.Resolved}/${summary.total}`,
+    report ? `Resolution rate: ${Math.round(report.successRate * 1000) / 10}%${report.targetResolved90 ? " | target met" : " | below 90% target"}` : "",
     `Inactive for more than 30 days: ${summary.Over30}`,
     `Still unknown: ${summary.Unknown}`
-  ];
+  ].filter(Boolean);
 
   if (summary.Resolved === 0 && summary.total > 0) {
     lines.push("Scan now auto-starts API fast-path enrichment, with helper tabs as fallback.");

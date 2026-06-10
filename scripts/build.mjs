@@ -91,6 +91,7 @@ async function buildOnce() {
   });
 
   copyFile(path.join(srcDir, "manifest.json"), path.join(outDir, "manifest.json"));
+  copyFile(path.join(srcDir, "pageCapture.js"), path.join(outDir, "pageCapture.js"));
   copyDir(path.join(srcDir, "popup"), path.join(outDir, "popup"));
 
   const maybe = path.join(outDir, "popup", "popup.ts");

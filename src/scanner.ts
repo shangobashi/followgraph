@@ -1,7 +1,7 @@
 import type { LastScan, Progress, ScanSummary } from "./types";
 import { classifyUsers, summarize } from "./activity";
 import { runApiFastPathEnrichment } from "./fastpath";
-import { parseFollowingApiUsers } from "./followingApi";
+import { installFollowingApiCapture, parseFollowingApiUsers } from "./followingApi";
 import { parseVisibleUsers } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
 import { UserStore } from "./store";
@@ -54,6 +54,10 @@ function registerStorageSync() {
   });
 }
 
+function targetMet(summary: ScanSummary) {
+  return summary.total > 0 && summary.Resolved / summary.total >= 0.9;
+}
+
 async function runScan() {
   if (!isFollowingPage()) {
     ensureUI();
@@ -64,6 +68,7 @@ async function runScan() {
   window.__FOLLOWGRAPH_SCAN_COMPLETE__ = false;
   ensureUI();
   uiSetStatus("Scanning...");
+  installFollowingApiCapture();
 
   const store = new UserStore();
   let extractedTotal = 0;
@@ -122,6 +127,11 @@ async function runScan() {
   await saveLastScan(users, summary).catch(() => {});
   window.__FOLLOWGRAPH_SCAN_COMPLETE__ = true;
 
+  if (targetMet(summary)) {
+    uiSetStatus("Scan complete. 90% resolution target met from captured following data.");
+    return;
+  }
+
   uiSetStatus("Scan complete. Starting activity enrichment...");
 
   const fastPath = await runApiFastPathEnrichment(users, summary, {
@@ -134,7 +144,7 @@ async function runScan() {
     return null;
   });
 
-  if (fastPath && fastPath.resolved > 0) {
+  if (fastPath && (fastPath.resolved > 0 || targetMet(fastPath.summary))) {
     uiSetSummary(fastPath.summary);
     uiEnableExport(fastPath.users);
     uiSetStatus(
@@ -143,7 +153,7 @@ async function runScan() {
       }`
     );
 
-    if (!fastPath.shouldFallback) {
+    if (!fastPath.shouldFallback || targetMet(fastPath.summary)) {
       return;
     }
   }
@@ -167,7 +177,7 @@ function registerRuntimeListener() {
   if (window.__FOLLOWGRAPH_LISTENER_READY__) return;
   window.__FOLLOWGRAPH_LISTENER_READY__ = true;
 
-  chrome.runtime.onMessage.addListener((msg: { action?: string; username?: string }, _sender: unknown, sendResponse: (value?: unknown) => void) => {
+  chrome.runtime.onMessage.addListener((msg: { action?: string; username?: string; restId?: string | null }, _sender: unknown, sendResponse: (value?: unknown) => void) => {
     if (msg?.action === "FOLLOWGRAPH_START") {
       if (window.__FOLLOWGRAPH_RUNNING__) {
         ensureUI();
@@ -193,7 +203,7 @@ function registerRuntimeListener() {
     }
 
     if (msg?.action === "FOLLOWGRAPH_GET_PROFILE_ACTIVITY") {
-      void extractProfileActivity(msg.username)
+      void extractProfileActivity({ username: msg.username || "", restId: msg.restId ?? null })
         .then((result) => sendResponse(result))
         .catch((error) => {
           console.error(error);

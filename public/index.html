@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="FollowGraph v1.3 is a privacy-first browser extension that exports your X/Twitter following graph and resolves profile activity with an API-first local pipeline."
+      content="FollowGraph v1.3.1 is a privacy-first browser extension that exports your X/Twitter following graph and resolves profile activity with captured API enrichment."
     />
     <meta name="theme-color" content="#07111d" />
-    <title>FollowGraph v1.3</title>
+    <title>FollowGraph v1.3.1</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -30,7 +30,7 @@
         <span class="brand-word">FollowGraph</span>
       </a>
       <div class="topbar-actions">
-        <span class="micro-pill">v1.3</span>
+        <span class="micro-pill">v1.3.1</span>
         <span class="micro-pill">Client-side only</span>
         <span class="micro-pill">Chrome + Edge</span>
         <a
@@ -50,12 +50,12 @@
           <p class="eyebrow">Made by Shango Bashi</p>
           <h1 class="hero-title">
             <span class="title-line"><span>Export your following graph</span></span>
-            <span class="title-line accent-line"><span>with the v1.3 API fast path.</span></span>
+            <span class="title-line accent-line"><span>with captured API enrichment.</span></span>
           </h1>
           <p class="lede">
-            FollowGraph v1.3 streams users out of X's virtualized Following list, then resolves profile activity
-            through an API-first local scheduler before falling back to helper tabs only where needed. Large runs are
-            designed for high-throughput same-session processing instead of profile-by-profile waiting.
+            FollowGraph v1.3.1 streams users out of X's virtualized Following list, captures real X API responses,
+            preserves rest IDs, and resolves profile activity through a local scheduler before falling back to helper
+            tabs only where needed.
           </p>
           <div class="actions">
             <a class="primary" href="./downloads/followgraph-extension.zip" download>Download Extension Zip</a>
@@ -135,7 +135,7 @@
             <div class="scan-foot">
               <div class="foot-row">
                 <span>Stream-safe for React virtualization</span>
-                <span>v1.3 API-first resolver</span>
+                <span>v1.3.1 captured API resolver</span>
               </div>
               <div class="scan-track" aria-hidden="true"><span></span></div>
             </div>
@@ -152,8 +152,8 @@
           <h2>Built for X's virtualized list, not for a fantasy DOM.</h2>
           <p>
             Most scrapers wait until scrolling ends. FollowGraph extracts during the scroll loop, dedupes in memory,
-            and in v1.3 resolves profile activity through X's authenticated web API from your own session before
-            falling back to helper tabs for edge cases.
+            and in v1.3.1 captures X's own API payloads, keeps rest IDs, and resolves profile activity from your
+            browser session before falling back to helper tabs for edge cases.
           </p>
           <div class="tag-row">
             <span>Virtualized list aware</span>
@@ -164,7 +164,7 @@
         </article>
 
         <article class="panel panel-stat" data-reveal>
-          <p class="tiny-label">v1.3 throughput</p>
+          <p class="tiny-label">v1.3.1 throughput</p>
           <strong>Rendered profile pages are no longer the default unit of work.</strong>
           <span>Large runs use API lanes first and reserve helper tabs for unresolved profiles.</span>
         </article>
@@ -209,8 +209,8 @@
 
           <article class="step">
             <span class="step-index">03</span>
-            <h3>Let v1.3 resolve activity through the fast path.</h3>
-            <p>As soon as the list is captured, FollowGraph uses API lanes first, keeps local snapshots updated in batches, and falls back to helper tabs only where needed.</p>
+            <h3>Let v1.3.1 resolve activity through captured API data.</h3>
+            <p>As soon as accounts are captured, FollowGraph uses rest IDs and API lanes first, keeps local snapshots updated in batches, and falls back to helper tabs only where needed.</p>
           </article>
         </div>
       </section>
@@ -255,11 +255,11 @@
       <div class="modal-backdrop" data-close-install></div>
       <section class="install-modal" role="dialog" aria-modal="true" aria-labelledby="installModalTitle">
         <button class="modal-close" type="button" data-close-install aria-label="Close install instructions">Close</button>
-        <p class="section-label">Install FollowGraph v1.3</p>
+        <p class="section-label">Install FollowGraph v1.3.1</p>
         <h2 id="installModalTitle">A polished install path for both non-devs and developers.</h2>
         <p class="modal-lede">
-          The fastest route is the prebuilt zip. No npm, no local build, no terminal. v1.3 ships the API-first
-          enrichment pipeline by default, and the GitHub path stays available if you want to inspect or modify it.
+          The fastest route is the prebuilt zip. No npm, no local build, no terminal. v1.3.1 ships captured API
+          enrichment by default, and the GitHub path stays available if you want to inspect or modify it.
         </p>
 
         <div class="modal-grid">

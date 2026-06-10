@@ -1,9 +1,10 @@
 export type ActivityCategory = "Active" | "Dormant" | "Inactive" | "Unknown";
-export type ActivitySource = "followingCard" | "apiTimeline" | "profileTimeline" | "none";
+export type ActivitySource = "followingCard" | "followingApi" | "apiTimeline" | "profileTimeline" | "none";
 export type ProfileState = "posts" | "noPosts" | "protected" | "suspended" | "unavailable" | "unknown";
 export type EnrichmentStatus = "not_started" | "done" | "failed";
 
 export interface User {
+  restId?: string | null;
   username: string;
   displayName: string;
   profileUrl: string;
@@ -36,6 +37,20 @@ export interface LastScan {
   timestamp: number;
   users: ClassifiedUser[];
   summary: ScanSummary;
+  report?: ScanReport;
+}
+
+export interface ScanReport {
+  timestamp: number;
+  total: number;
+  resolved: number;
+  unresolved: number;
+  successRate: number;
+  targetResolved90: boolean;
+  resolvedBySource: Record<ActivitySource, number>;
+  terminalStates: Record<ProfileState, number>;
+  elapsedMs?: number | null;
+  profilesPerMinute?: number | null;
 }
 
 export interface Progress {
@@ -51,6 +66,7 @@ export interface Progress {
 export type StopReason = "idle" | "hardCap" | "maxUsers";
 
 export interface QueuedUser {
+  restId?: string | null;
   username: string;
   displayName: string;
   profileUrl: string;
@@ -99,6 +115,7 @@ export interface JobState {
 }
 
 export interface ProfileActivityResult {
+  restId?: string | null;
   username: string;
   lastActivityISO: string | null;
   activitySource: ActivitySource;

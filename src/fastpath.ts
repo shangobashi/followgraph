@@ -8,7 +8,8 @@ const API_DEFAULT_CONCURRENCY = 48;
 const API_MIN_CONCURRENCY = 6;
 const API_MAX_CONCURRENCY = 96;
 const API_FLUSH_BATCH_SIZE = 100;
-const API_FAILURE_FALLBACK_THRESHOLD = 0.55;
+const TARGET_RESOLUTION_RATE = 0.9;
+const MAX_API_ATTEMPTS = 3;
 
 export interface FastPathResult {
   users: ClassifiedUser[];
@@ -55,6 +56,7 @@ function updateUser(user: ClassifiedUser, result: Awaited<ReturnType<typeof reso
     [
       {
         ...user,
+        restId: result.restId ?? user.restId ?? null,
         lastActivityISO: result.lastActivityISO,
         activitySource: result.activitySource,
         profileState: result.profileState,
@@ -103,6 +105,8 @@ export async function runApiFastPathEnrichment(
     };
   }
 
+  const workQueue = queue.map((item) => ({ index: item.index, attempts: 0 }));
+  const totalQueue = workQueue.length;
   let cursor = 0;
   let active = 0;
   let completed = 0;
@@ -124,10 +128,14 @@ export async function runApiFastPathEnrichment(
     );
   }
 
-  async function runOne(index: number) {
+  async function runOne(item: { index: number; attempts: number }) {
+    let finalAttempt = true;
+    const index = item.index;
     const current = users[index];
     try {
-      const result = await time(telemetry, "apiResolve", () => resolveProfileActivityViaXApi(current.username));
+      const result = await time(telemetry, "apiResolve", () =>
+        resolveProfileActivityViaXApi({ username: current.username, restId: current.restId })
+      );
       users[index] = updateUser(current, result, Date.now());
       if (result?.profileState !== "unknown") {
         resolved += 1;
@@ -141,8 +149,13 @@ export async function runApiFastPathEnrichment(
       const rateLimited = message.toLowerCase().includes("rate limited") || message.includes("429");
       if (rateLimited) {
         concurrency = clamp(Math.floor(concurrency * 0.55), API_MIN_CONCURRENCY, API_MAX_CONCURRENCY);
-        rateLimitCooldownUntil = Date.now() + 12000;
+        rateLimitCooldownUntil = Date.now() + 15000 * Math.max(item.attempts + 1, 1);
         markResolved(telemetry, "rateLimited", completed + 1);
+        if (item.attempts + 1 < MAX_API_ATTEMPTS) {
+          workQueue.push({ index, attempts: item.attempts + 1 });
+          finalAttempt = false;
+          return;
+        }
       } else {
         markResolved(telemetry, "failed", completed + 1);
       }
@@ -160,6 +173,7 @@ export async function runApiFastPathEnrichment(
         Date.now()
       )[0];
     } finally {
+      if (!finalAttempt) return;
       completed += 1;
       dirty += 1;
 
@@ -173,14 +187,14 @@ export async function runApiFastPathEnrichment(
 
   await new Promise<void>((resolve) => {
     const pump = () => {
-      while (active < concurrency && cursor < queue.length && Date.now() >= rateLimitCooldownUntil) {
-        const next = queue[cursor++];
+      while (active < concurrency && cursor < workQueue.length && Date.now() >= rateLimitCooldownUntil) {
+        const next = workQueue[cursor++];
         active += 1;
-        void runOne(next.index)
+        void runOne(next)
           .catch(() => {})
           .finally(() => {
             active -= 1;
-            if (completed >= queue.length) {
+            if (completed >= totalQueue) {
               resolve();
               return;
             }
@@ -188,7 +202,7 @@ export async function runApiFastPathEnrichment(
           });
       }
 
-      if (active === 0 && cursor < queue.length && Date.now() < rateLimitCooldownUntil) {
+      if (active === 0 && cursor < workQueue.length && Date.now() < rateLimitCooldownUntil) {
         window.setTimeout(pump, Math.max(rateLimitCooldownUntil - Date.now(), 250));
       }
     };
@@ -198,14 +212,15 @@ export async function runApiFastPathEnrichment(
 
   await flush(true);
 
-  const unresolvedRatio = queue.length > 0 ? failed / queue.length : 0;
+  summary = summarize(users);
+  const resolutionRate = summary.total > 0 ? summary.Resolved / summary.total : 0;
   return {
     users,
     summary,
     attempted: queue.length,
     resolved,
     failed,
-    shouldFallback: resolved === 0 || unresolvedRatio >= API_FAILURE_FALLBACK_THRESHOLD,
+    shouldFallback: resolutionRate < TARGET_RESOLUTION_RATE,
     telemetry: serializeTelemetry(telemetry)
   };
 }

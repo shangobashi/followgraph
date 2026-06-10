@@ -79,8 +79,15 @@ async function waitFor<T>(factory: () => T | null | undefined, timeoutMs = 5000)
   return null;
 }
 
-export async function extractProfileActivity(expectedUsername?: string): Promise<ProfileActivityResult> {
-  const apiResult = await resolveProfileActivityViaXApi(expectedUsername || currentUsername("")).catch(() => null);
+export async function extractProfileActivity(
+  expected?: string | { username: string; restId?: string | null }
+): Promise<ProfileActivityResult> {
+  const expectedUsername = typeof expected === "string" ? expected : expected?.username;
+  const apiInput =
+    typeof expected === "string"
+      ? expected || currentUsername("")
+      : { username: expected?.username || currentUsername(""), restId: expected?.restId ?? null };
+  const apiResult = await resolveProfileActivityViaXApi(apiInput).catch(() => null);
   if (apiResult && apiResult.profileState !== "unknown") {
     return apiResult;
   }

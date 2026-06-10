@@ -8,6 +8,10 @@ function isResolvedProfile(user: Pick<ClassifiedUser, "daysSince" | "enrichmentS
   return user.daysSince !== null || (user.enrichmentStatus === "done" && user.profileState !== "unknown");
 }
 
+function isTerminalProfileState(state?: ClassifiedUser["profileState"]) {
+  return state === "noPosts" || state === "protected" || state === "suspended" || state === "unavailable";
+}
+
 export function classifyUsers(users: User[], now = Date.now()): ClassifiedUser[] {
   return users.map((user) => {
     let category: ClassifiedUser["category"] = "Unknown";
@@ -23,11 +27,14 @@ export function classifyUsers(users: User[], now = Date.now()): ClassifiedUser[]
       }
     }
 
+    const profileState = user.profileState ?? (user.lastActivityISO ? "posts" : "unknown");
+    const resolvedTerminal = isTerminalProfileState(profileState);
+
     return {
       ...user,
       activitySource: user.activitySource ?? (user.lastActivityISO ? "followingCard" : "none"),
-      profileState: user.profileState ?? (user.lastActivityISO ? "posts" : "unknown"),
-      enrichmentStatus: user.enrichmentStatus ?? (user.lastActivityISO ? "done" : "not_started"),
+      profileState,
+      enrichmentStatus: user.enrichmentStatus ?? (user.lastActivityISO || resolvedTerminal ? "done" : "not_started"),
       lastCheckedAt: user.lastCheckedAt ?? null,
       note: user.note ?? null,
       unfollowedAt: user.unfollowedAt ?? null,

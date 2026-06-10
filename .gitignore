@@ -5,3 +5,4 @@ extension/
 .vercel
 .env*.local
 public/downloads/
+reports/

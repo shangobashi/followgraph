@@ -1,35 +1,39 @@
-# FollowGraph v1.3
+# FollowGraph v1.3.1
 
-A privacy-first Chrome/Edge extension that scans your X/Twitter **Following** page, exports your following list, and resolves profile activity locally with a v1.3 API-first enrichment pipeline.
+A privacy-first Chrome/Edge extension that scans your X/Twitter **Following** page, exports your following list, and resolves profile activity locally with a v1.3.1 captured API enrichment pipeline.
 
-## What changed in v1.3
+## What changed in v1.3.1
 
 - API-first activity enrichment from the logged-in X web session
-- Adaptive 48-96 lane scheduler for large follow graphs
+- Page-world capture of real X GraphQL responses during the scan
+- `restId` persistence so most unresolved accounts skip screen-name lookup
+- Adaptive 64-96 lane scheduler for large follow graphs with rate-limit retry
 - Helper-tab DOM enrichment retained as fallback when X API discovery fails
 - Faster fallback scroll loop for X's virtualized React list
 - Batched local persistence during enrichment
-- Throughput telemetry in job state and popup status
-- Local 7.5K-scale benchmark harness
+- Throughput telemetry and run reports for the 90% resolution target
+- Local 7.5K-scale benchmark and acceptance gate
 
 ## Why it works
 
 X uses a **virtualized React list**: off-screen accounts are unmounted from the DOM.
-FollowGraph still extracts users during the scroll loop when DOM fallback is needed, but v1.3 now tries to resolve profile activity through X's authenticated web API from the user's own browser session before opening helper tabs.
+FollowGraph still extracts users during the scroll loop when DOM fallback is needed, but v1.3.1 now captures real X GraphQL responses in the page context, persists `restId` and embedded activity metadata, and resolves profile activity through X's authenticated web API from the user's own browser session before opening helper tabs.
 
-That removes the old hot path where thousands of accounts each required a rendered profile page, content-script injection, DOM polling, and tab navigation.
+That removes the old hot path where thousands of accounts each required a rendered profile page, content-script injection, DOM polling, and tab navigation. Protected, suspended, unavailable, and no-post accounts are treated as resolved terminal states instead of failed unknowns.
 
 ## Features
 
 - Streaming extraction for virtualized lists
+- Main-world X API response capture
+- `restId`-based timeline lookup
 - API-first profile activity resolver
-- Adaptive concurrency with rate-limit backoff
+- Adaptive concurrency with rate-limit backoff and retry
 - Parallel helper-tab fallback for schema drift and API misses
 - Batched local persistence
 - Shadow DOM on-page overlay
 - Export JSON + CSV
 - Save last scan in `chrome.storage.local`
-- Popup shows last scan summary, exports, worker progress, and throughput
+- Popup shows last scan summary, resolution rate, exports, worker progress, and throughput
 
 ## Install
 
@@ -48,16 +52,19 @@ Load:
 
 1. Open: `https://x.com/<you>/following` or `https://twitter.com/<you>/following`
 2. Click extension icon -> **Scan Following**
-3. Let v1.3 stream the list, run API-fast enrichment, and fall back to helper tabs only where needed
+3. Let v1.3.1 stream the list, run captured API enrichment, and fall back to helper tabs only where needed
 4. Export JSON/CSV
 
 ## Benchmark
 
 ```bash
-npm run benchmark -- 7500 48 350
+npm run benchmark:report
+npm run acceptance
 ```
 
-The benchmark models the v1.3 scheduler at 7.5K accounts. Real-world speed depends on X session health, network latency, API availability, rate limits, and the number of accounts that need DOM fallback.
+The report benchmark models the v1.3.1 scheduler at 7.5K accounts and writes `reports/latest.json`. The acceptance gate fails unless the report resolves at least 90% within 90 minutes for at least 7.5K accounts.
+
+This is still a synthetic gate. Real-world proof comes from the exported scan report produced after a live X run. Real-world speed depends on X session health, network latency, API availability, rate limits, and the number of accounts that need DOM fallback.
 
 ## Notes
 

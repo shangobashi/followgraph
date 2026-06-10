@@ -14,6 +14,7 @@ export function downloadJson(filename: string, data: unknown) {
 
 export function toCSV(rows: ClassifiedUser[]): string {
   const headers: Array<keyof ClassifiedUser> = [
+    "restId",
     "username",
     "displayName",
     "profileUrl",

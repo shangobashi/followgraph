@@ -60,6 +60,7 @@ function usernameFromUrl(urlString: string) {
 
 function queueFromUsers(users: ClassifiedUser[]) {
   return users.map<QueuedUser>((user) => ({
+    restId: user.restId ?? null,
     username: user.username,
     displayName: user.displayName,
     profileUrl: user.profileUrl
@@ -281,6 +282,7 @@ function enrichmentOutcome(result: ProfileActivityResult): UnfollowResultStatus 
 async function persistActivityResult(queueUser: QueuedUser, result: ProfileActivityResult) {
   await updateCachedUser(queueUser, (user, now) => ({
     ...user,
+    restId: result.restId ?? user.restId ?? queueUser.restId ?? null,
     lastActivityISO: result.lastActivityISO,
     activitySource: result.activitySource,
     profileState: result.profileState,
@@ -636,7 +638,8 @@ chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: { status?: string 
       if (context.jobType === "enrich") {
         result = (await chrome.tabs.sendMessage(tabId, {
           action: "FOLLOWGRAPH_GET_PROFILE_ACTIVITY",
-          username: context.currentUser.username
+          username: context.currentUser.username,
+          restId: context.currentUser.restId ?? null
         })) as ProfileActivityResult;
       } else {
         result = (await chrome.tabs.sendMessage(tabId, {

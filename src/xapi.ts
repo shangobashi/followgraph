@@ -1,4 +1,5 @@
 import type { ProfileActivityResult } from "./types";
+import { getCapturedGraphQLOperation } from "./followingApi";
 
 const OPERATION_NAMES = ["UserByScreenName", "UserTweets", "UserTweetsAndReplies"] as const;
 
@@ -17,6 +18,8 @@ interface GraphQLOperation {
 interface UserLookup {
   username: string;
   restId: string;
+  profileState: ProfileActivityResult["profileState"];
+  note: string | null;
 }
 
 interface TimelineEntry {
@@ -165,6 +168,15 @@ function graphQLUrl(operation: GraphQLOperation, variables: unknown, features: u
   return `https://x.com/i/api/graphql/${operation.queryId}/${operation.name}?${params.toString()}`;
 }
 
+function operationByName(name: OperationName): GraphQLOperation | null {
+  const cached = operationCache.get(name);
+  if (cached) return cached;
+
+  const captured = getCapturedGraphQLOperation(name);
+  if (!captured) return null;
+  return { name, queryId: captured.queryId };
+}
+
 async function fetchGraphQL(auth: XApiAuthContext, operation: GraphQLOperation, variables: unknown, features: unknown) {
   const response = await fetch(graphQLUrl(operation, variables, features), {
     credentials: "include",
@@ -212,6 +224,47 @@ function firstStringByKey(value: unknown, keys: string[]): string | null {
   }
 
   return null;
+}
+
+function firstLegacyRecord(value: unknown): { record: Record<string, unknown>; legacy: Record<string, unknown> } | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const legacy = record.legacy;
+  if (legacy && typeof legacy === "object" && !Array.isArray(legacy)) {
+    return { record, legacy: legacy as Record<string, unknown> };
+  }
+
+  for (const child of Object.values(record)) {
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        const found = firstLegacyRecord(item);
+        if (found) return found;
+      }
+      continue;
+    }
+
+    const found = firstLegacyRecord(child);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function terminalStateFromPayload(value: unknown): Pick<UserLookup, "profileState" | "note"> {
+  const text = cleanText(JSON.stringify(value)).toLowerCase();
+  if (text.includes("suspended")) return { profileState: "suspended", note: "Account suspended." };
+  if (text.includes("unavailable") || text.includes("doesn't exist") || text.includes("not found")) {
+    return { profileState: "unavailable", note: "Account unavailable." };
+  }
+
+  const found = firstLegacyRecord(value);
+  const legacy = found?.legacy;
+  if (legacy?.protected === true) return { profileState: "protected", note: "Posts are protected." };
+  if (typeof legacy?.statuses_count === "number" && legacy.statuses_count <= 0) {
+    return { profileState: "noPosts", note: "No public posts found." };
+  }
+
+  return { profileState: "unknown", note: null };
 }
 
 function collectTimelineEntries(value: unknown, out: TimelineEntry[] = []): TimelineEntry[] {
@@ -299,7 +352,7 @@ const timelineFeatures = {
 function timelineVariables(restId: string) {
   return {
     userId: restId,
-    count: 5,
+    count: 40,
     includePromotedContent: false,
     withQuickPromoteEligibilityTweetFields: false,
     withVoice: false,
@@ -308,39 +361,51 @@ function timelineVariables(restId: string) {
 }
 
 async function lookupUser(auth: XApiAuthContext, username: string): Promise<UserLookup | null> {
-  const operation = operationCache.get("UserByScreenName");
+  const operation = operationByName("UserByScreenName");
   if (!operation) return null;
 
   const data = await fetchGraphQL(auth, operation, userLookupVariables(username), userFeatures);
   const restId = firstStringByKey(data, ["rest_id", "id_str"]);
   if (!restId) return null;
+  const terminal = terminalStateFromPayload(data);
 
-  return { username, restId };
+  return { username, restId, profileState: terminal.profileState, note: terminal.note };
 }
 
 async function fetchTimeline(auth: XApiAuthContext, restId: string) {
-  const operation = operationCache.get("UserTweets") ?? operationCache.get("UserTweetsAndReplies");
-  if (!operation) return [];
+  const operations = [operationByName("UserTweets"), operationByName("UserTweetsAndReplies")].filter(
+    (operation): operation is GraphQLOperation => Boolean(operation)
+  );
+  const out: TimelineEntry[] = [];
 
-  const data = await fetchGraphQL(auth, operation, timelineVariables(restId), timelineFeatures);
-  return collectTimelineEntries(data);
+  for (const operation of operations) {
+    const data = await fetchGraphQL(auth, operation, timelineVariables(restId), timelineFeatures);
+    out.push(...collectTimelineEntries(data));
+  }
+
+  return out;
 }
 
-export async function resolveProfileActivityViaXApi(username: string): Promise<ProfileActivityResult | null> {
+export async function resolveProfileActivityViaXApi(
+  input: string | { username: string; restId?: string | null }
+): Promise<ProfileActivityResult | null> {
+  const username = typeof input === "string" ? input : input.username;
   const auth = await getXApiAuthContext();
   if (!auth) return null;
 
   await discoverOperations();
 
-  const lookup = await lookupUser(auth, username);
-  if (!lookup) return null;
+  const lookup = typeof input === "string" || !input.restId ? await lookupUser(auth, username) : null;
+  const restId = typeof input === "string" ? lookup?.restId : input.restId || lookup?.restId;
+  if (!restId) return null;
 
-  const entries = await fetchTimeline(auth, lookup.restId);
+  const entries = await fetchTimeline(auth, restId);
   const latest = entries.find((entry) => !entry.pinned) ?? entries[0] ?? null;
   const lastActivityISO = latest?.createdAt ? parseTwitterDate(latest.createdAt) : null;
 
   if (lastActivityISO) {
     return {
+      restId,
       username,
       lastActivityISO,
       activitySource: "apiTimeline",
@@ -349,7 +414,19 @@ export async function resolveProfileActivityViaXApi(username: string): Promise<P
     };
   }
 
+  if (lookup?.profileState && lookup.profileState !== "unknown") {
+    return {
+      restId,
+      username,
+      lastActivityISO: null,
+      activitySource: "apiTimeline",
+      profileState: lookup.profileState,
+      note: lookup.note
+    };
+  }
+
   return {
+    restId,
     username,
     lastActivityISO: null,
     activitySource: "none",
@@ -363,5 +440,5 @@ export async function isXApiFastPathAvailable() {
   if (!auth) return false;
 
   await discoverOperations();
-  return Boolean(operationCache.get("UserByScreenName") && (operationCache.get("UserTweets") || operationCache.get("UserTweetsAndReplies")));
+  return Boolean(operationByName("UserTweets") || operationByName("UserTweetsAndReplies") || operationByName("UserByScreenName"));
 }
