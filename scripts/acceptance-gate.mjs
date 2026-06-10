@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { execSync } from "node:child_process";
 
 const reportPath = process.argv[2] || "reports/latest.json";
+const allowSynthetic = process.argv.includes("--allow-synthetic");
 const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
 const minResolutionRate = Number(report.thresholds?.minResolutionRate ?? 0.9);
 const maxElapsedMs = Number(report.thresholds?.maxElapsedMs ?? 90 * 60000);
@@ -13,6 +14,8 @@ const failureReasons = [];
 
 if (report.gitCommit !== currentCommit) failureReasons.push("report-commit-does-not-match-head");
 if (report.version !== "1.3.1") failureReasons.push("report-version-mismatch");
+if (!allowSynthetic && report.mode === "synthetic") failureReasons.push("synthetic-report-not-accepted");
+if (!["live", "replay", "synthetic"].includes(String(report.mode))) failureReasons.push("report-mode-invalid");
 if (report.pass !== true) failureReasons.push("report-pass-field-not-true");
 if (Math.abs(Number(report.resolutionRate ?? 0) - recomputedResolutionRate) > 0.000001) {
   failureReasons.push("resolution-rate-inconsistent");

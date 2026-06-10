@@ -272,8 +272,12 @@ function collectTimelineEntries(value: unknown, out: TimelineEntry[] = []): Time
 
   const record = value as Record<string, unknown>;
   const legacy = record.legacy as Record<string, unknown> | undefined;
+  const isTweet =
+    String(record.__typename ?? "").toLowerCase().includes("tweet") ||
+    typeof legacy?.full_text === "string" ||
+    (typeof legacy?.id_str === "string" && typeof legacy?.screen_name !== "string");
   const createdAt = typeof legacy?.created_at === "string" ? legacy.created_at : null;
-  if (createdAt) {
+  if (isTweet && createdAt) {
     const text = cleanText(JSON.stringify(record)).toLowerCase();
     out.push({ createdAt, pinned: text.includes("pinned") || text.includes("promoted") });
   }
@@ -287,6 +291,15 @@ function collectTimelineEntries(value: unknown, out: TimelineEntry[] = []): Time
   }
 
   return out;
+}
+
+function latestTimelineEntry(entries: TimelineEntry[]) {
+  const candidates = entries.filter((entry) => !entry.pinned);
+  const source = candidates.length > 0 ? candidates : entries;
+  return source
+    .map((entry) => ({ entry, parsed: entry.createdAt ? Date.parse(entry.createdAt) : Number.NaN }))
+    .filter((item) => !Number.isNaN(item.parsed))
+    .sort((a, b) => b.parsed - a.parsed)[0]?.entry ?? null;
 }
 
 function parseTwitterDate(value: string) {
@@ -400,7 +413,7 @@ export async function resolveProfileActivityViaXApi(
   if (!restId) return null;
 
   const entries = await fetchTimeline(auth, restId);
-  const latest = entries.find((entry) => !entry.pinned) ?? entries[0] ?? null;
+  const latest = latestTimelineEntry(entries);
   const lastActivityISO = latest?.createdAt ? parseTwitterDate(latest.createdAt) : null;
 
   if (lastActivityISO) {

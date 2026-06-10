@@ -58,13 +58,20 @@ Load:
 ## Benchmark
 
 ```bash
-npm run benchmark:report
+npm run replay:report
 npm run acceptance
 ```
 
-The report benchmark models the v1.3.1 scheduler at 7.5K accounts and writes `reports/latest.json`. The acceptance gate fails unless the report resolves at least 90% within 90 minutes for at least 7.5K accounts.
+For a synthetic scheduler smoke test:
 
-This is still a synthetic gate. Real-world proof comes from the exported scan report produced after a live X run. Real-world speed depends on X session health, network latency, API availability, rate limits, and the number of accounts that need DOM fallback.
+```bash
+npm run benchmark:report
+npm run acceptance:synthetic
+```
+
+The replay report models the v1.3.1 architecture at 7.5K accounts and writes `reports/latest.json`. The default acceptance gate rejects synthetic reports and fails unless the report resolves at least 90% within 90 minutes for at least 7.5K accounts.
+
+Replay is not a replacement for a real X run. Real-world proof comes from the exported scan report produced after a live X run. Real-world speed depends on X session health, network latency, API availability, rate limits, and the number of accounts that need DOM fallback.
 
 ## Notes
 
