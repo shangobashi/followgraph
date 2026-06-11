@@ -124,6 +124,10 @@ body {
   line-height: 1.45;
 }
 
+.cardBody {
+  white-space: pre-line;
+}
+
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   color: rgba(232, 237, 246, 0.84);

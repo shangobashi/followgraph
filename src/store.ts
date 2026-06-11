@@ -3,6 +3,10 @@ import type { User } from "./types";
 export class UserStore {
   private map = new Map<string, User>();
 
+  constructor(users: User[] = []) {
+    this.add(users);
+  }
+
   add(users: User[]) {
     for (const u of users) {
       const key = u.username.toLowerCase();

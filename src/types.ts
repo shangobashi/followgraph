@@ -40,6 +40,9 @@ export interface LastScan {
   report?: ScanReport;
 }
 
+export type ScanStatus = "running" | "paused" | "recoverable_error" | "completed" | "cancelled";
+export type ScanPhase = "scanning" | "api_fast_path" | "helper_enrichment" | "completed";
+
 export interface ScanReport {
   timestamp: number;
   total: number;
@@ -63,7 +66,24 @@ export interface Progress {
   elapsedMs: number;
 }
 
-export type StopReason = "idle" | "hardCap" | "maxUsers";
+export type StopReason = "idle" | "hardCap" | "maxUsers" | "xLoadError" | "networkStall" | "manualPause" | "tabNavigated";
+
+export interface ScanSession {
+  id: string;
+  status: ScanStatus;
+  phase: ScanPhase;
+  startedAt: number;
+  updatedAt: number;
+  sourceUrl: string;
+  tabId: number | null;
+  users: User[];
+  summary?: ScanSummary | null;
+  progress?: Progress | null;
+  stopReason?: StopReason | null;
+  error?: string | null;
+  canResume: boolean;
+  resumeHint?: string | null;
+}
 
 export interface QueuedUser {
   restId?: string | null;

@@ -1,11 +1,14 @@
-import type { ClassifiedUser, JobState, LastScan } from "../types";
-import { loadLastScan } from "../storage";
+import type { ClassifiedUser, JobState, LastScan, ScanSession } from "../types";
+import { loadLastScan, loadScanSession } from "../storage";
 import { downloadCsv, downloadJson, toCSV } from "../exporter";
 
 const statusEl = document.getElementById("status") as HTMLDivElement;
 const jobStatusEl = document.getElementById("jobStatus") as HTMLDivElement;
+const workflowStatusEl = document.getElementById("workflowStatus") as HTMLDivElement;
 const startBtn = document.getElementById("startBtn") as HTMLButtonElement;
+const pauseScanBtn = document.getElementById("pauseScanBtn") as HTMLButtonElement;
 const enrichBtn = document.getElementById("enrichBtn") as HTMLButtonElement;
+const clearScanBtn = document.getElementById("clearScanBtn") as HTMLButtonElement;
 const cancelJobBtn = document.getElementById("cancelJobBtn") as HTMLButtonElement;
 const enrichLimitInput = document.getElementById("enrichLimit") as HTMLInputElement;
 const unfollowLimitInput = document.getElementById("unfollowLimit") as HTMLInputElement;
@@ -22,6 +25,7 @@ const clearSelectionBtn = document.getElementById("clearSelectionBtn") as HTMLBu
 const unfollowSelectedBtn = document.getElementById("unfollowSelectedBtn") as HTMLButtonElement;
 
 let cachedLast: LastScan | null = null;
+let cachedScanSession: ScanSession | null = null;
 let currentCandidates: ClassifiedUser[] = [];
 const selectedUsernames = new Set<string>();
 let lastSeenJobFingerprint = "";
@@ -99,6 +103,76 @@ function formatActivitySummary(last: LastScan) {
   }
 
   return lines.join("\n");
+}
+
+function formatAge(timestamp: number) {
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  return `${hours}h ago`;
+}
+
+function scanSessionIsIncomplete(session: ScanSession | null) {
+  return Boolean(session && (session.status === "paused" || session.status === "recoverable_error"));
+}
+
+function scanSessionIsRunning(session: ScanSession | null) {
+  return session?.status === "running";
+}
+
+function formatWorkflow(session: ScanSession | null, job: JobState | null) {
+  const lines: string[] = [];
+
+  if (!session) {
+    lines.push("No active scan session.");
+    if (cachedLast?.summary.total) lines.push(`Last completed scan: ${cachedLast.summary.total} profiles.`);
+  } else {
+    lines.push(`Scan: ${session.status.replace("_", " ")} | ${session.phase.replace("_", " ")}`);
+    lines.push(`Saved profiles: ${session.users.length}`);
+    if (session.summary) {
+      lines.push(`Resolved: ${session.summary.Resolved}/${session.summary.total}`);
+    }
+    if (session.progress) {
+      lines.push(`Rounds: ${session.progress.rounds} | visible cells: ${session.progress.visibleCells}`);
+    }
+    lines.push(`Checkpoint: ${formatAge(session.updatedAt)}`);
+    if (session.error) lines.push(`Issue: ${session.error}`);
+    if (session.resumeHint) lines.push(session.resumeHint);
+  }
+
+  if (job?.status === "running") {
+    lines.push(`${job.type === "enrich" ? "Enrichment" : "Unfollow"} job running: ${job.completed}/${job.total}.`);
+  }
+
+  return lines.join("\n");
+}
+
+function resolvePrimaryScanAction() {
+  if (scanSessionIsRunning(cachedScanSession)) return "running";
+  if (scanSessionIsIncomplete(cachedScanSession)) return "resume";
+  return "start";
+}
+
+function updateWorkflowControls(job: JobState | null) {
+  const runningJob = Boolean(job && job.status === "running");
+  const runningScan = scanSessionIsRunning(cachedScanSession);
+  const incompleteScan = scanSessionIsIncomplete(cachedScanSession);
+  const primaryAction = resolvePrimaryScanAction();
+
+  startBtn.textContent =
+    primaryAction === "resume"
+      ? "Resume scan"
+      : cachedScanSession?.status === "completed" || cachedLast
+        ? "Start new scan"
+        : "Start scan";
+  startBtn.disabled = runningJob || runningScan;
+
+  pauseScanBtn.disabled = !runningScan;
+  enrichBtn.textContent = cachedLast?.summary.Resolved && cachedLast.summary.Resolved < cachedLast.summary.total ? "Resume enrichment" : "Start enrichment";
+  enrichBtn.disabled = runningJob || runningScan || incompleteScan || !cachedLast?.users.length;
+  clearScanBtn.disabled = runningScan || !cachedScanSession || cachedScanSession.status === "completed";
 }
 
 function getInactiveCandidates(last: LastScan) {
@@ -210,6 +284,12 @@ async function refreshLastScan() {
   renderReviewList();
 }
 
+async function refreshScanSession(job: JobState | null = null) {
+  cachedScanSession = await loadScanSession().catch(() => null);
+  workflowStatusEl.textContent = formatWorkflow(cachedScanSession, job);
+  updateWorkflowControls(job);
+}
+
 async function requestBackground<T>(payload: Record<string, unknown>) {
   return (await chrome.runtime.sendMessage(payload)) as T;
 }
@@ -252,14 +332,17 @@ async function refreshJobState() {
   cancelJobBtn.disabled = !job || job.status !== "running";
 
   const running = Boolean(job && job.status === "running");
-  startBtn.disabled = running;
-  enrichBtn.disabled = running;
   unfollowSelectedBtn.disabled = running || selectedUsernames.size === 0;
+  await refreshScanSession(job);
 
-  const fingerprint = job ? `${job.id}:${job.status}:${job.completed}:${job.failed}:${job.succeeded}` : "none";
+  const sessionFingerprint = cachedScanSession
+    ? `${cachedScanSession.id}:${cachedScanSession.status}:${cachedScanSession.phase}:${cachedScanSession.users.length}:${cachedScanSession.updatedAt}`
+    : "no-session";
+  const fingerprint = `${job ? `${job.id}:${job.status}:${job.completed}:${job.failed}:${job.succeeded}` : "none"}:${sessionFingerprint}`;
   if (fingerprint !== lastSeenJobFingerprint) {
     lastSeenJobFingerprint = fingerprint;
     await refreshLastScan();
+    await refreshScanSession(job);
   }
 }
 
@@ -305,32 +388,68 @@ cancelJobBtn.addEventListener("click", async () => {
   await refreshJobState();
 });
 
+async function getActiveFollowingTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !tab?.url) {
+    setStatus("No active tab detected.", "error");
+    return null;
+  }
+
+  if (!isValidFollowingUrl(tab.url)) {
+    setStatus("Open a /following page first.", "error");
+    return null;
+  }
+
+  return tab;
+}
+
+async function injectScanner(tabId: number) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["scanner.js"]
+  });
+}
+
 startBtn.addEventListener("click", async () => {
   try {
     setStatus("");
 
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id || !tab?.url) {
-      setStatus("No active tab detected.", "error");
-      return;
-    }
+    const tab = await getActiveFollowingTab();
+    if (!tab?.id) return;
 
-    if (!isValidFollowingUrl(tab.url)) {
-      setStatus("Open a /following page first.", "error");
-      return;
-    }
+    const action = resolvePrimaryScanAction() === "resume" ? "FOLLOWGRAPH_RESUME_SCAN" : "FOLLOWGRAPH_START_SCAN";
 
-    setStatus("Injecting scanner...");
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["scanner.js"]
-    });
-
-    await chrome.tabs.sendMessage(tab.id, { action: "FOLLOWGRAPH_START" });
-    setStatus("Scan started. Activity resolution will auto-start when the scan completes.", "success");
+    setStatus(action === "FOLLOWGRAPH_RESUME_SCAN" ? "Resuming scanner..." : "Injecting scanner...");
+    await injectScanner(tab.id);
+    await chrome.tabs.sendMessage(tab.id, { action, tabId: tab.id });
+    setStatus(
+      action === "FOLLOWGRAPH_RESUME_SCAN"
+        ? "Scan resumed from the saved checkpoint."
+        : "Scan started. Activity resolution will auto-start after the scan completes.",
+      "success"
+    );
+    await refreshJobState();
   } catch (error) {
     console.error(error);
     setStatus("Scan injection failed. See console.", "error");
+  }
+});
+
+pauseScanBtn.addEventListener("click", async () => {
+  try {
+    const tab = await getActiveFollowingTab();
+    if (!tab?.id) return;
+
+    await injectScanner(tab.id);
+    const result = await chrome.tabs.sendMessage(tab.id, { action: "FOLLOWGRAPH_CANCEL_SCAN" }).catch(() => ({
+      ok: false,
+      message: "Could not reach the running scan. It may already be stopped."
+    }));
+    setStatus(result?.message || "Pause requested.", result?.ok ? "success" : "error");
+    await refreshJobState();
+  } catch (error) {
+    console.error(error);
+    setStatus("Pause failed. See console.", "error");
   }
 });
 
@@ -341,6 +460,15 @@ enrichBtn.addEventListener("click", async () => {
     limit
   });
 
+  setStatus(result.message, result.ok ? "success" : "error");
+  await refreshJobState();
+});
+
+clearScanBtn.addEventListener("click", async () => {
+  const confirmed = window.confirm("Clear the saved incomplete scan session? Completed scan exports will stay available.");
+  if (!confirmed) return;
+
+  const result = await requestBackground<{ ok: boolean; message: string }>({ action: "FOLLOWGRAPH_CLEAR_SCAN_SESSION" });
   setStatus(result.message, result.ok ? "success" : "error");
   await refreshJobState();
 });

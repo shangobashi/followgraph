@@ -2,7 +2,7 @@ import type { ClassifiedUser, Progress, ScanSummary, StopReason } from "./types"
 import { downloadCsv, downloadJson, toCSV } from "./exporter";
 
 const PANEL_ID = "followgraph-root";
-const VERSION = "v1.3.1";
+const VERSION = "v1.3.2";
 const BRAND = "Made by Shango Bashi";
 const GITHUB_URL = "https://github.com/shangobashi/followgraph";
 
@@ -274,5 +274,9 @@ export function uiEnableExport(classified: ClassifiedUser[]) {
 export function uiSetFinalStatus(reason: StopReason) {
   if (reason === "hardCap") uiSetStatus("Stopped (safety cap)");
   else if (reason === "maxUsers") uiSetStatus("Stopped (max users cap)");
+  else if (reason === "xLoadError") uiSetStatus("Paused: X stopped loading");
+  else if (reason === "networkStall") uiSetStatus("Paused: waiting for X to load");
+  else if (reason === "manualPause") uiSetStatus("Paused");
+  else if (reason === "tabNavigated") uiSetStatus("Paused: tab left Following page");
   else uiSetStatus("Scan complete");
 }

@@ -9,13 +9,20 @@
   <body>
     <div class="wrap">
       <div class="titleRow">
-        <div class="title">FollowGraph v1.2</div>
+        <div class="title">FollowGraph v1.3.2</div>
         <div class="subtitle">Scan, resolve activity in parallel, review, unfollow.</div>
       </div>
 
+      <div class="card workflowCard">
+        <div class="cardTitle">Current workflow</div>
+        <div id="workflowStatus" class="cardBody">-</div>
+      </div>
+
       <div class="actionGrid">
-        <button id="startBtn" class="btn">Scan + Auto Enrich</button>
-        <button id="enrichBtn" class="btn alt">Resume Enrichment</button>
+        <button id="startBtn" class="btn">Start scan</button>
+        <button id="pauseScanBtn" class="btn alt" disabled>Pause scan</button>
+        <button id="enrichBtn" class="btn alt">Start enrichment</button>
+        <button id="clearScanBtn" class="btnSmall" disabled>Clear session</button>
       </div>
 
       <div class="controlGrid">
@@ -30,7 +37,7 @@
       </div>
 
       <div class="hint">
-        Scanning now auto-starts v1.2 parallel activity resolution in helper tabs. Use resume if the job was stopped or you only want to run a manual batch.
+        FollowGraph saves scan checkpoints automatically. If X fails or reloads, fix the page and resume from the saved session.
       </div>
 
       <div class="card">

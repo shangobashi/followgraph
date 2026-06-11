@@ -11,7 +11,7 @@ import type {
   UnfollowResultStatus
 } from "./types";
 import { classifyUsers, summarize } from "./activity";
-import { appendUnfollowAudit, loadJobState, loadLastScan, saveJobState, saveLastScan } from "./storage";
+import { appendUnfollowAudit, loadJobState, loadLastScan, loadScanSession, saveJobState, saveLastScan, saveScanSession } from "./storage";
 
 const ENRICHMENT_DEFAULT_WORKERS = 15;
 const ENRICHMENT_MAX_WORKERS = 20;
@@ -513,6 +513,14 @@ async function startEnrichment(limit?: number) {
     return { ok: false, message: "A job is already running." };
   }
 
+  const scanSession = await loadScanSession();
+  if (scanSession?.status === "running") {
+    return { ok: false, message: "A scan is still running. Finish or pause it before enrichment." };
+  }
+  if (scanSession?.status === "recoverable_error" || scanSession?.status === "paused") {
+    return { ok: false, message: "Resume or cancel the incomplete scan before enrichment." };
+  }
+
   const last = await loadLastScan();
   if (!last?.users.length) {
     return { ok: false, message: "Run a following scan first." };
@@ -596,6 +604,15 @@ chrome.runtime.onMessage.addListener(
           return runSerialized(() => cancelJob());
         case "FOLLOWGRAPH_GET_JOB_STATE":
           return loadJobState();
+        case "FOLLOWGRAPH_GET_SCAN_SESSION":
+          return loadScanSession();
+        case "FOLLOWGRAPH_CLEAR_SCAN_SESSION":
+          return runSerialized(async () => {
+            const session = await loadScanSession();
+            if (session?.status === "running") return { ok: false, message: "Pause the running scan before clearing it." };
+            await saveScanSession(null);
+            return { ok: true, message: "Scan session cleared." };
+          });
         default:
           return { ok: false, message: "Unknown action." };
       }

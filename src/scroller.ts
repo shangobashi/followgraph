@@ -35,7 +35,8 @@ function countUserCells(): number {
 }
 
 export async function runScrollLoop(opts: {
-  onTick: (p: Omit<Progress, "extractedTotal">) => void;
+  onTick: (p: Omit<Progress, "extractedTotal">) => StopReason | void;
+  shouldStop?: () => StopReason | null;
   scrollStepPx?: number;
   maxIdleRounds?: number;
   hardCapRounds?: number;
@@ -88,6 +89,11 @@ export async function runScrollLoop(opts: {
       rounds++;
       newContentSinceLastRound = false;
 
+      const preStopReason = opts.shouldStop?.();
+      if (preStopReason) {
+        return { reason: preStopReason, rounds, elapsedMs, visibleCells: countUserCells() };
+      }
+
       const preCount = countUserCells();
       if (preCount >= maxUsers) {
         opts.onTick({
@@ -126,7 +132,7 @@ export async function runScrollLoop(opts: {
         idleRounds++;
       }
 
-      opts.onTick({
+      const tickStopReason = opts.onTick({
         rounds,
         idleRounds,
         visibleCells: currentCount,
@@ -134,6 +140,10 @@ export async function runScrollLoop(opts: {
         delayMs: settleMs,
         elapsedMs
       });
+
+      if (tickStopReason) {
+        return { reason: tickStopReason, rounds, elapsedMs, visibleCells: currentCount };
+      }
     }
 
     const elapsedMs = performance.now() - startedAt;
