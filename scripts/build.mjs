@@ -56,6 +56,23 @@ function writeExtensionZip() {
   fs.writeFileSync(zipPath, Buffer.from(archive));
 }
 
+function extensionZipPlugin(label) {
+  return {
+    name: `followgraph-zip-${label}`,
+    setup(build) {
+      build.onEnd((result) => {
+        if (result.errors.length > 0) return;
+        try {
+          writeExtensionZip();
+          console.log(`Rebuilt ${label} and refreshed extension zip`);
+        } catch (error) {
+          console.error(error);
+        }
+      });
+    }
+  };
+}
+
 async function buildOnce() {
   ensureDir(outDir);
 
@@ -117,7 +134,8 @@ if (!watch) {
     target: ["chrome120"],
     outfile: path.join(outDir, "background.js"),
     sourcemap: false,
-    minify: true
+    minify: true,
+    plugins: [extensionZipPlugin("background.js")]
   });
 
   const ctxScanner = await esbuild.context({
@@ -127,7 +145,8 @@ if (!watch) {
     target: ["chrome120"],
     outfile: path.join(outDir, "scanner.js"),
     sourcemap: false,
-    minify: true
+    minify: true,
+    plugins: [extensionZipPlugin("scanner.js")]
   });
 
   const ctxPopup = await esbuild.context({
@@ -137,7 +156,8 @@ if (!watch) {
     target: ["chrome120"],
     outfile: path.join(outDir, "popup", "popup.js"),
     sourcemap: false,
-    minify: true
+    minify: true,
+    plugins: [extensionZipPlugin("popup/popup.js")]
   });
 
   await buildOnce();
@@ -150,6 +170,14 @@ if (!watch) {
       copyFile(path.join(srcDir, "manifest.json"), path.join(outDir, "manifest.json"));
       writeExtensionZip();
       console.log("Copied manifest.json and refreshed extension zip");
+    } catch {}
+  });
+
+  fs.watch(path.join(srcDir, "pageCapture.js"), { persistent: true }, () => {
+    try {
+      copyFile(path.join(srcDir, "pageCapture.js"), path.join(outDir, "pageCapture.js"));
+      writeExtensionZip();
+      console.log("Copied pageCapture.js and refreshed extension zip");
     } catch {}
   });
 
