@@ -92,7 +92,7 @@ async function main() {
   if (elapsedMs > maxElapsedMs) failureReasons.push("elapsed-time-above-threshold");
 
   const report = {
-    version: "1.3.3",
+    version: "1.3.4",
     gitCommit: gitCommit(),
     mode: "synthetic",
     startedAt: startedAt.toISOString(),

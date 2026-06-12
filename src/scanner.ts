@@ -213,14 +213,16 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
       const values = store.values();
       const classified = classifyUsers(values, now);
       const summary = summarize(classified);
-      await saveScanSession({
+      const nextSession: ScanSession = {
         ...session,
         ...patch,
         users: values,
         summary,
         progress: lastProgress,
         updatedAt: now
-      });
+      };
+      await saveScanSession(nextSession);
+      Object.assign(session, nextSession);
       lastCheckpointAt = now;
       lastCheckpointSize = extractedTotal;
     };
@@ -233,6 +235,21 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     } catch {
       // Checkpointing should never stop an active scan.
     }
+  }
+
+  async function drainCheckpoints() {
+    await checkpointChain.catch(() => {});
+  }
+
+  async function saveSessionState(patch: Partial<ScanSession>) {
+    await drainCheckpoints();
+    const nextSession: ScanSession = {
+      ...session,
+      ...patch,
+      updatedAt: Date.now()
+    };
+    await saveScanSession(nextSession);
+    Object.assign(session, nextSession);
   }
 
   function harvestApiUsers() {
@@ -326,7 +343,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
 
   if (isRecoverableStop(result.reason)) {
     const message = stopMessage(result.reason);
-    await checkpoint(true, {
+    await saveSessionState({
       status: result.reason === "manualPause" ? "paused" : "recoverable_error",
       stopReason: result.reason,
       error: message,
@@ -337,9 +354,9 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     return;
   }
 
+  await drainCheckpoints();
   await saveLastScan(users, summary).catch(() => {});
-  await saveScanSession({
-    ...session,
+  await saveSessionState({
     status: "running",
     phase: "api_fast_path",
     users: store.values(),
@@ -353,8 +370,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   window.__FOLLOWGRAPH_SCAN_COMPLETE__ = true;
 
   if (targetMet(summary)) {
-    await saveScanSession({
-      ...session,
+    await saveSessionState({
       status: "completed",
       phase: "completed",
       users: store.values(),
@@ -393,8 +409,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     );
 
     if (!fastPath.shouldFallback || targetMet(fastPath.summary)) {
-      await saveScanSession({
-        ...session,
+      await saveSessionState({
         status: "completed",
         phase: "completed",
         users: fastPath.users,
@@ -409,8 +424,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     }
   }
 
-  await saveScanSession({
-    ...session,
+  await saveSessionState({
     status: "completed",
     phase: "helper_enrichment",
     users: latestUsers,
@@ -430,8 +444,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     }));
 
   if (enrichment?.ok) {
-    await saveScanSession({
-      ...session,
+    await saveSessionState({
       status: "completed",
       phase: "helper_enrichment",
       users: latestUsers,
@@ -446,8 +459,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     return;
   }
 
-  await saveScanSession({
-    ...session,
+  await saveSessionState({
     status: "completed",
     phase: "completed",
     users: latestUsers,
