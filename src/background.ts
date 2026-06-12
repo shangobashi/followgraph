@@ -5,6 +5,7 @@ import type {
   JobWorkerState,
   ProfileActivityResult,
   QueuedUser,
+  ScanSession,
   ScanSummary,
   UnfollowAuditEntry,
   UnfollowResult,
@@ -16,6 +17,7 @@ import { appendUnfollowAudit, loadJobState, loadLastScan, loadScanSession, saveJ
 const ENRICHMENT_DEFAULT_WORKERS = 15;
 const ENRICHMENT_MAX_WORKERS = 20;
 const ENRICHMENT_FLUSH_BATCH_SIZE = 50;
+const SCAN_SESSION_STALE_MS = 45_000;
 
 type LastScanCache = {
   users: ClassifiedUser[];
@@ -39,6 +41,31 @@ function runSerialized<T>(operation: () => Promise<T>) {
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function scanSessionBlocksJobs(session: ScanSession | null) {
+  return session?.status === "running" || session?.status === "recoverable_error" || session?.status === "paused";
+}
+
+async function loadNormalizedScanSession() {
+  const session = await loadScanSession();
+  if (!session) return null;
+
+  if (session.status !== "running" || Date.now() - session.updatedAt <= SCAN_SESSION_STALE_MS) {
+    return session;
+  }
+
+  const next: ScanSession = {
+    ...session,
+    status: "recoverable_error",
+    stopReason: session.stopReason ?? "networkStall",
+    error: session.error ?? "The previous scan stopped updating before it could finish.",
+    canResume: true,
+    resumeHint: session.resumeHint ?? "Open the saved /following page, then click Resume scan."
+  };
+
+  await saveScanSession(next);
+  return next;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -513,7 +540,7 @@ async function startEnrichment(limit?: number) {
     return { ok: false, message: "A job is already running." };
   }
 
-  const scanSession = await loadScanSession();
+  const scanSession = await loadNormalizedScanSession();
   if (scanSession?.status === "running") {
     return { ok: false, message: "A scan is still running. Finish or pause it before enrichment." };
   }
@@ -554,6 +581,11 @@ async function startUnfollow(usernames: string[], limit: number) {
   const existing = await loadJobState();
   if (existing?.status === "running") {
     return { ok: false, message: "A job is already running." };
+  }
+
+  const scanSession = await loadNormalizedScanSession();
+  if (scanSessionBlocksJobs(scanSession)) {
+    return { ok: false, message: "Finish, resume, or clear the incomplete scan before unfollow review." };
   }
 
   const last = await loadLastScan();
@@ -605,10 +637,10 @@ chrome.runtime.onMessage.addListener(
         case "FOLLOWGRAPH_GET_JOB_STATE":
           return loadJobState();
         case "FOLLOWGRAPH_GET_SCAN_SESSION":
-          return loadScanSession();
+          return loadNormalizedScanSession();
         case "FOLLOWGRAPH_CLEAR_SCAN_SESSION":
           return runSerialized(async () => {
-            const session = await loadScanSession();
+            const session = await loadNormalizedScanSession();
             if (session?.status === "running") return { ok: false, message: "Pause the running scan before clearing it." };
             await saveScanSession(null);
             return { ok: true, message: "Scan session cleared." };

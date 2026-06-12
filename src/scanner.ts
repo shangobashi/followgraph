@@ -30,6 +30,15 @@ function isFollowingPage(): boolean {
   return hostOk && pathOk;
 }
 
+function followingOwner(urlString: string) {
+  try {
+    const url = new URL(urlString);
+    return url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() || "";
+  } catch {
+    return "";
+  }
+}
+
 function syncOverlayFromLastScan(last: LastScan) {
   ensureUI();
   uiSetSummary(last.summary);
@@ -143,6 +152,24 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   }
 
   const priorSession = mode === "resume" ? await loadScanSession().catch(() => null) : null;
+  if (mode === "resume" && priorSession?.canResume) {
+    const savedOwner = followingOwner(priorSession.sourceUrl);
+    const currentOwner = followingOwner(location.href);
+    if (savedOwner && currentOwner && savedOwner !== currentOwner) {
+      const error = `Saved scan belongs to @${savedOwner}, but this page is @${currentOwner}/following.`;
+      await saveScanSession({
+        ...priorSession,
+        status: "recoverable_error",
+        error,
+        canResume: true,
+        resumeHint: `Open @${savedOwner}/following, then click Resume scan.`
+      }).catch(() => {});
+      ensureUI();
+      uiSetStatus(error);
+      return;
+    }
+  }
+
   const session = priorSession?.canResume ? priorSession : createSession(tabId);
   session.status = "running";
   session.phase = "scanning";
@@ -381,6 +408,19 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
       return;
     }
   }
+
+  await saveScanSession({
+    ...session,
+    status: "completed",
+    phase: "helper_enrichment",
+    users: latestUsers,
+    summary: latestSummary,
+    progress: lastProgress,
+    stopReason: result.reason,
+    error: null,
+    canResume: false,
+    resumeHint: null
+  }).catch(() => {});
 
   const enrichment = await chrome.runtime
     .sendMessage({ action: "FOLLOWGRAPH_START_ENRICHMENT", limit: 0 })

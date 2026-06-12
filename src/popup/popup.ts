@@ -1,5 +1,5 @@
 import type { ClassifiedUser, JobState, LastScan, ScanSession } from "../types";
-import { loadLastScan, loadScanSession } from "../storage";
+import { loadLastScan } from "../storage";
 import { downloadCsv, downloadJson, toCSV } from "../exporter";
 
 const statusEl = document.getElementById("status") as HTMLDivElement;
@@ -26,6 +26,7 @@ const unfollowSelectedBtn = document.getElementById("unfollowSelectedBtn") as HT
 
 let cachedLast: LastScan | null = null;
 let cachedScanSession: ScanSession | null = null;
+let cachedJob: JobState | null = null;
 let currentCandidates: ClassifiedUser[] = [];
 const selectedUsernames = new Set<string>();
 let lastSeenJobFingerprint = "";
@@ -122,6 +123,10 @@ function scanSessionIsRunning(session: ScanSession | null) {
   return session?.status === "running";
 }
 
+function scanSessionBlocksActions(session: ScanSession | null) {
+  return scanSessionIsRunning(session) || scanSessionIsIncomplete(session);
+}
+
 function formatWorkflow(session: ScanSession | null, job: JobState | null) {
   const lines: string[] = [];
 
@@ -173,6 +178,7 @@ function updateWorkflowControls(job: JobState | null) {
   enrichBtn.textContent = cachedLast?.summary.Resolved && cachedLast.summary.Resolved < cachedLast.summary.total ? "Resume enrichment" : "Start enrichment";
   enrichBtn.disabled = runningJob || runningScan || incompleteScan || !cachedLast?.users.length;
   clearScanBtn.disabled = runningScan || !cachedScanSession || cachedScanSession.status === "completed";
+  updateSelectionState();
 }
 
 function getInactiveCandidates(last: LastScan) {
@@ -250,7 +256,8 @@ function renderReviewList() {
 
 function updateSelectionState() {
   clearSelectionBtn.disabled = selectedUsernames.size === 0;
-  unfollowSelectedBtn.disabled = selectedUsernames.size === 0;
+  unfollowSelectedBtn.disabled =
+    selectedUsernames.size === 0 || Boolean(cachedJob && cachedJob.status === "running") || scanSessionBlocksActions(cachedScanSession);
 }
 
 async function refreshLastScan() {
@@ -285,7 +292,7 @@ async function refreshLastScan() {
 }
 
 async function refreshScanSession(job: JobState | null = null) {
-  cachedScanSession = await loadScanSession().catch(() => null);
+  cachedScanSession = await requestBackground<ScanSession | null>({ action: "FOLLOWGRAPH_GET_SCAN_SESSION" }).catch(() => null);
   workflowStatusEl.textContent = formatWorkflow(cachedScanSession, job);
   updateWorkflowControls(job);
 }
@@ -328,11 +335,12 @@ function formatJob(job: JobState | null) {
 
 async function refreshJobState() {
   const job = await requestBackground<JobState | null>({ action: "FOLLOWGRAPH_GET_JOB_STATE" }).catch(() => null);
+  cachedJob = job;
   jobStatusEl.textContent = formatJob(job);
   cancelJobBtn.disabled = !job || job.status !== "running";
 
   const running = Boolean(job && job.status === "running");
-  unfollowSelectedBtn.disabled = running || selectedUsernames.size === 0;
+  if (running) unfollowSelectedBtn.disabled = true;
   await refreshScanSession(job);
 
   const sessionFingerprint = cachedScanSession
