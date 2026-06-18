@@ -53,6 +53,14 @@ function gitCommit() {
   }
 }
 
+function releaseVersion() {
+  try {
+    return JSON.parse(fs.readFileSync("package.json", "utf8")).version || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 async function main() {
   const opts = readArgs(process.argv.slice(2));
   const total = opts.total;
@@ -92,7 +100,7 @@ async function main() {
   if (elapsedMs > maxElapsedMs) failureReasons.push("elapsed-time-above-threshold");
 
   const report = {
-    version: "1.3.6",
+    version: releaseVersion(),
     gitCommit: gitCommit(),
     mode: "synthetic",
     startedAt: startedAt.toISOString(),

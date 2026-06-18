@@ -164,6 +164,8 @@ function updateWorkflowControls(job: JobState | null) {
   const runningJob = Boolean(job && job.status === "running");
   const runningScan = scanSessionIsRunning(cachedScanSession);
   const incompleteScan = scanSessionIsIncomplete(cachedScanSession);
+  const savedCheckpointCount = cachedScanSession?.users.length ?? 0;
+  const hasEnrichmentSource = Boolean(cachedLast?.users.length || savedCheckpointCount > 0);
   const primaryAction = resolvePrimaryScanAction();
 
   startBtn.textContent =
@@ -175,8 +177,13 @@ function updateWorkflowControls(job: JobState | null) {
   startBtn.disabled = runningJob || runningScan;
 
   pauseScanBtn.disabled = !runningScan;
-  enrichBtn.textContent = cachedLast?.summary.Resolved && cachedLast.summary.Resolved < cachedLast.summary.total ? "Resume enrichment" : "Start enrichment";
-  enrichBtn.disabled = runningJob || runningScan || incompleteScan || !cachedLast?.users.length;
+  enrichBtn.textContent =
+    (runningScan || incompleteScan) && savedCheckpointCount > 0
+      ? `Enrich saved ${savedCheckpointCount}`
+      : cachedLast?.summary.Resolved && cachedLast.summary.Resolved < cachedLast.summary.total
+        ? "Resume enrichment"
+        : "Start enrichment";
+  enrichBtn.disabled = runningJob || !hasEnrichmentSource;
   clearScanBtn.disabled = runningScan || !cachedScanSession || cachedScanSession.status === "completed";
   updateSelectionState();
 }
@@ -462,6 +469,14 @@ pauseScanBtn.addEventListener("click", async () => {
 });
 
 enrichBtn.addEventListener("click", async () => {
+  if (scanSessionIsRunning(cachedScanSession)) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+    if (tab?.id && tab.url && isValidFollowingUrl(tab.url)) {
+      await injectScanner(tab.id).catch(() => {});
+      await chrome.tabs.sendMessage(tab.id, { action: "FOLLOWGRAPH_CANCEL_SCAN" }).catch(() => null);
+    }
+  }
+
   const limit = parseEnrichLimit();
   const result = await requestBackground<{ ok: boolean; message: string }>({
     action: "FOLLOWGRAPH_START_ENRICHMENT",

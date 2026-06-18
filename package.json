@@ -1,8 +1,8 @@
 {
   "name": "followgraph",
   "private": true,
-  "version": "1.3.6",
-  "description": "FollowGraph v1.3.6: client-side Following Exporter for X/Twitter with cursor-aware scan completion and captured API enrichment",
+  "version": "1.3.7",
+  "description": "FollowGraph v1.3.7: client-side Following Exporter for X/Twitter with saved-checkpoint enrichment, cursor-aware scan completion, and captured API enrichment",
   "author": "Shango Bashi",
   "type": "module",
   "scripts": {

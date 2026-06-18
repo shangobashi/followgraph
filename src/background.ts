@@ -12,6 +12,7 @@ import type {
   UnfollowResultStatus
 } from "./types";
 import { classifyUsers, summarize } from "./activity";
+import { scanSessionBlocksJobs, scanSessionCanBeFinalized } from "./sessionRecovery";
 import { appendUnfollowAudit, loadJobState, loadLastScan, loadScanSession, saveJobState, saveLastScan, saveScanSession } from "./storage";
 
 const ENRICHMENT_DEFAULT_WORKERS = 15;
@@ -41,10 +42,6 @@ function runSerialized<T>(operation: () => Promise<T>) {
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function scanSessionBlocksJobs(session: ScanSession | null) {
-  return session?.status === "running" || session?.status === "recoverable_error" || session?.status === "paused";
 }
 
 async function loadNormalizedScanSession() {
@@ -540,7 +537,13 @@ async function startEnrichment(limit?: number) {
     return { ok: false, message: "A job is already running." };
   }
 
-  const scanSession = await loadNormalizedScanSession();
+  let scanSession = await loadNormalizedScanSession();
+  if (scanSessionBlocksJobs(scanSession) && scanSessionCanBeFinalized(scanSession)) {
+    const finalized = await finalizeScanSession();
+    if (!finalized.ok) return finalized;
+    scanSession = await loadNormalizedScanSession();
+  }
+
   if (scanSession?.status === "running") {
     return { ok: false, message: "A scan is still running. Finish or pause it before enrichment." };
   }
@@ -574,6 +577,38 @@ async function startEnrichment(limit?: number) {
       effectiveLimit >= last.users.length
         ? `Resolving activity for all ${queue.length} accounts across ${concurrency} helper tabs.`
         : `Resolving activity for ${queue.length} accounts across ${concurrency} helper tabs.`
+  };
+}
+
+async function finalizeScanSession() {
+  const session = await loadNormalizedScanSession();
+  if (!scanSessionCanBeFinalized(session)) {
+    return { ok: false, message: "No saved scan checkpoint can be finished." };
+  }
+
+  const now = Date.now();
+  const users = classifyUsers(session!.users, now);
+  const summary = summarize(users);
+  await saveLastScan(users, summary, now);
+  await saveScanSession({
+    ...session!,
+    status: "completed",
+    phase: "completed",
+    users,
+    summary,
+    stopReason: "idle",
+    error: null,
+    canResume: false,
+    resumeHint: null,
+    updatedAt: now
+  });
+
+  lastScanCache = buildLastScanCache(await loadLastScan());
+
+  return {
+    ok: true,
+    message: `Saved scan finished with ${summary.total} profiles. You can start enrichment now.`,
+    summary
   };
 }
 
@@ -630,6 +665,8 @@ chrome.runtime.onMessage.addListener(
       switch (msg.action) {
         case "FOLLOWGRAPH_START_ENRICHMENT":
           return runSerialized(() => startEnrichment(msg.limit));
+        case "FOLLOWGRAPH_FINALIZE_SCAN_SESSION":
+          return runSerialized(() => finalizeScanSession());
         case "FOLLOWGRAPH_START_UNFOLLOW":
           return runSerialized(() => startUnfollow(msg.usernames || [], msg.limit || 25));
         case "FOLLOWGRAPH_CANCEL_JOB":

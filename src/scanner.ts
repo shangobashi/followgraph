@@ -206,6 +206,11 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
 
   updateExtractedTotal();
 
+  async function sessionWasExternallyCompleted() {
+    const current = await loadScanSession().catch(() => null);
+    return Boolean(current && current.id === session.id && current.status === "completed" && current.canResume === false);
+  }
+
   async function checkpoint(force = false, patch: Partial<ScanSession> = {}) {
     const now = Date.now();
     if (!force && extractedTotal - lastCheckpointSize < SCAN_CHECKPOINT_USER_DELTA && now - lastCheckpointAt < SCAN_CHECKPOINT_INTERVAL_MS) {
@@ -213,6 +218,11 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     }
 
     const write = async () => {
+      if (await sessionWasExternallyCompleted()) {
+        window.__FOLLOWGRAPH_SCAN_ABORT__ = true;
+        return;
+      }
+
       const values = store.values();
       const classified = classifyUsers(values, now);
       const summary = summarize(classified);
@@ -246,6 +256,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
 
   async function saveSessionState(patch: Partial<ScanSession>) {
     await drainCheckpoints();
+    if (await sessionWasExternallyCompleted()) return;
     const nextSession: ScanSession = {
       ...session,
       ...patch,

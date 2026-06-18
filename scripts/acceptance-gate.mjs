@@ -7,13 +7,14 @@ const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
 const minResolutionRate = Number(report.thresholds?.minResolutionRate ?? 0.9);
 const maxElapsedMs = Number(report.thresholds?.maxElapsedMs ?? 90 * 60000);
 const currentCommit = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+const releaseVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 const resolved = Number(report.resolved ?? 0);
 const totalAccounts = Number(report.totalAccounts ?? 0);
 const recomputedResolutionRate = totalAccounts > 0 ? resolved / totalAccounts : 0;
 const failureReasons = [];
 
 if (report.gitCommit !== currentCommit) failureReasons.push("report-commit-does-not-match-head");
-if (report.version !== "1.3.6") failureReasons.push("report-version-mismatch");
+if (report.version !== releaseVersion) failureReasons.push("report-version-mismatch");
 if (!allowSynthetic && report.mode === "synthetic") failureReasons.push("synthetic-report-not-accepted");
 if (!["live", "replay", "synthetic"].includes(String(report.mode))) failureReasons.push("report-mode-invalid");
 if (report.pass !== true) failureReasons.push("report-pass-field-not-true");

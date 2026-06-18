@@ -6,12 +6,21 @@ import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
 const outdir = await mkdtemp(join(tmpdir(), "followgraph-scan-completion-"));
-const outfile = join(outdir, "scanCompletion.mjs");
+const scanCompletionOutfile = join(outdir, "scanCompletion.mjs");
+const sessionRecoveryOutfile = join(outdir, "sessionRecovery.mjs");
 
 try {
   await build({
     entryPoints: ["src/scanCompletion.ts"],
-    outfile,
+    outfile: scanCompletionOutfile,
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    logLevel: "silent"
+  });
+  await build({
+    entryPoints: ["src/sessionRecovery.ts"],
+    outfile: sessionRecoveryOutfile,
     bundle: true,
     format: "esm",
     platform: "browser",
@@ -25,7 +34,8 @@ try {
     SCAN_MAX_IDLE_ROUNDS,
     UNKNOWN_LOADING_WAIT_IDLE_ROUNDS,
     decideScanIdle
-  } = await import(pathToFileURL(outfile).href);
+  } = await import(pathToFileURL(scanCompletionOutfile).href);
+  const { scanSessionBlocksJobs, scanSessionCanBeFinalized } = await import(pathToFileURL(sessionRecoveryOutfile).href);
 
   assert.ok(
     SCAN_MAX_IDLE_ROUNDS > UNKNOWN_LOADING_WAIT_IDLE_ROUNDS,
@@ -148,6 +158,31 @@ try {
     "recoverable_stall",
     "blank loading state should remain recoverable"
   );
+
+  const savedUser = {
+    username: "saved_user",
+    displayName: "Saved User",
+    profileUrl: "https://x.com/saved_user",
+    lastActivityISO: null
+  };
+  const baseSession = {
+    id: "session-1",
+    phase: "scanning",
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+    sourceUrl: "https://x.com/me/following",
+    tabId: 1,
+    users: [savedUser],
+    canResume: true
+  };
+
+  assert.equal(scanSessionBlocksJobs({ ...baseSession, status: "recoverable_error" }), true);
+  assert.equal(scanSessionCanBeFinalized({ ...baseSession, status: "recoverable_error" }), true);
+  assert.equal(scanSessionCanBeFinalized({ ...baseSession, status: "running" }), true);
+  assert.equal(scanSessionCanBeFinalized({ ...baseSession, status: "paused" }), true);
+  assert.equal(scanSessionCanBeFinalized({ ...baseSession, status: "recoverable_error", users: [] }), false);
+  assert.equal(scanSessionBlocksJobs({ ...baseSession, status: "completed", canResume: false }), false);
+  assert.equal(scanSessionCanBeFinalized({ ...baseSession, status: "completed", canResume: false }), false);
 
   console.log("scan completion decisions passed");
 } finally {

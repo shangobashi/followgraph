@@ -44,6 +44,14 @@ function gitCommit() {
   }
 }
 
+function releaseVersion() {
+  try {
+    return JSON.parse(fs.readFileSync("package.json", "utf8")).version || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 function percentile(values, p) {
   const sorted = [...values].sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.floor(sorted.length * p));
@@ -101,7 +109,7 @@ async function main() {
   if (elapsedMs > maxElapsedMs) failureReasons.push("elapsed-time-above-threshold");
 
   const report = {
-    version: "1.3.6",
+    version: releaseVersion(),
     gitCommit: gitCommit(),
     mode: "replay",
     startedAt: startedAt.toISOString(),
