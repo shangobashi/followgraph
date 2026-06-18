@@ -24,6 +24,7 @@ declare global {
 const SCAN_CHECKPOINT_USER_DELTA = 250;
 const SCAN_CHECKPOINT_INTERVAL_MS = 3000;
 const X_LOAD_RETRY_LIMIT = 3;
+const X_LOAD_RETRY_INTERVAL_MS = 5000;
 
 function isFollowingPage(): boolean {
   const hostOk = ["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(location.hostname);
@@ -196,6 +197,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   let lastCheckpointSize = 0;
   let lastProgress: Progress | null = null;
   let xLoadRetries = 0;
+  let lastXLoadRetryAt = 0;
   let checkpointChain: Promise<void> = Promise.resolve();
 
   function updateExtractedTotal() {
@@ -292,11 +294,26 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
       uiUpdateProgress(progress);
       const issue = detectXLoadIssue();
       if (issue) {
-        if (issue.retryButton && xLoadRetries < X_LOAD_RETRY_LIMIT) {
+        const now = Date.now();
+        if (
+          issue.retryButton &&
+          (xLoadRetries < X_LOAD_RETRY_LIMIT || (extractedTotal > 0 && now - lastXLoadRetryAt >= X_LOAD_RETRY_INTERVAL_MS))
+        ) {
           xLoadRetries += 1;
+          lastXLoadRetryAt = now;
           issue.retryButton.click();
-          uiSetStatus(`X load error detected. Retrying page load (${xLoadRetries}/${X_LOAD_RETRY_LIMIT})...`);
+          uiSetStatus(
+            extractedTotal > 0
+              ? `X load hiccup detected after ${extractedTotal} profiles. Retrying in place...`
+              : `X load error detected. Retrying page load (${xLoadRetries}/${X_LOAD_RETRY_LIMIT})...`
+          );
           void checkpoint(false, { error: "X load error detected; retrying page load." });
+          return;
+        }
+
+        if (extractedTotal > 0) {
+          uiSetStatus(`X load hiccup detected after ${extractedTotal} profiles. Waiting without discarding the scan...`);
+          void checkpoint(false, { error: "X load hiccup detected; scan is still active." });
           return;
         }
 

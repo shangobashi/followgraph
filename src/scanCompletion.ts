@@ -3,6 +3,9 @@ export interface FollowingPaginationState {
   hasBottomCursor: boolean | null;
   lastResponseAt: number | null;
   lastBottomCursorAt: number | null;
+  lastUserCount: number | null;
+  lastNewUserCount: number | null;
+  uniqueUserCount: number;
 }
 
 export type ScanIdleDecision = "continue" | "complete" | "recoverable_stall";
@@ -17,9 +20,9 @@ export interface ScanIdleInput {
 export const BLANK_LOADING_STALL_IDLE_ROUNDS = 8;
 export const PROVEN_END_IDLE_ROUNDS = 10;
 export const NO_SPINNER_END_IDLE_ROUNDS = 18;
-export const CURSOR_STALL_IDLE_ROUNDS = 45;
-export const UNKNOWN_LOADING_STALL_IDLE_ROUNDS = 90;
-export const SCAN_MAX_IDLE_ROUNDS = UNKNOWN_LOADING_STALL_IDLE_ROUNDS + 10;
+export const CURSOR_BACKED_WAIT_IDLE_ROUNDS = 240;
+export const UNKNOWN_LOADING_WAIT_IDLE_ROUNDS = 300;
+export const SCAN_MAX_IDLE_ROUNDS = UNKNOWN_LOADING_WAIT_IDLE_ROUNDS + 10;
 
 export function decideScanIdle(input: ScanIdleInput): ScanIdleDecision {
   const { idleRounds, extractedTotal, loading, pagination } = input;
@@ -33,14 +36,14 @@ export function decideScanIdle(input: ScanIdleInput): ScanIdleDecision {
   }
 
   if (pagination && pagination.responseCount > 0) {
-    if (pagination.hasBottomCursor === false) {
+    if (pagination.hasBottomCursor === false || pagination.lastNewUserCount === 0) {
       return idleRounds >= PROVEN_END_IDLE_ROUNDS ? "complete" : "continue";
     }
 
     if (pagination.hasBottomCursor === true) {
-      return idleRounds >= CURSOR_STALL_IDLE_ROUNDS ? "recoverable_stall" : "continue";
+      return idleRounds >= CURSOR_BACKED_WAIT_IDLE_ROUNDS ? "complete" : "continue";
     }
   }
 
-  return idleRounds >= UNKNOWN_LOADING_STALL_IDLE_ROUNDS ? "recoverable_stall" : "continue";
+  return extractedTotal > 0 && idleRounds >= UNKNOWN_LOADING_WAIT_IDLE_ROUNDS ? "complete" : "continue";
 }

@@ -31,8 +31,12 @@ const followingPaginationState: FollowingPaginationState = {
   responseCount: 0,
   hasBottomCursor: null,
   lastResponseAt: null,
-  lastBottomCursorAt: null
+  lastBottomCursorAt: null,
+  lastUserCount: null,
+  lastNewUserCount: null,
+  uniqueUserCount: 0
 };
+const followingPaginationUsernames = new Set<string>();
 let listenerReady = false;
 
 function cleanText(value?: string | null) {
@@ -98,10 +102,21 @@ function findBottomCursor(value: unknown): string | null {
 
 function rememberFollowingPagination(body: unknown) {
   const bottomCursor = findBottomCursor(body);
+  const users = collectUsers(body);
+  let newUserCount = 0;
+  for (const username of users.keys()) {
+    if (followingPaginationUsernames.has(username)) continue;
+    followingPaginationUsernames.add(username);
+    newUserCount += 1;
+  }
+
   followingPaginationState.responseCount += 1;
   followingPaginationState.hasBottomCursor = bottomCursor !== null;
   followingPaginationState.lastResponseAt = Date.now();
   if (bottomCursor !== null) followingPaginationState.lastBottomCursorAt = followingPaginationState.lastResponseAt;
+  followingPaginationState.lastUserCount = users.size;
+  followingPaginationState.lastNewUserCount = newUserCount;
+  followingPaginationState.uniqueUserCount = followingPaginationUsernames.size;
 }
 
 function parseJsonParam(params: URLSearchParams, key: string) {
