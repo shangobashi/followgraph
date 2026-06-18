@@ -1,11 +1,11 @@
-# FollowGraph v1.3.4
+# FollowGraph v1.3.5
 
-A privacy-first Chrome/Edge extension that scans your X/Twitter **Following** page, exports your following list, and resolves profile activity locally with a v1.3.4 captured API enrichment pipeline and resilient scan recovery.
+A privacy-first Chrome/Edge extension that scans your X/Twitter **Following** page, exports your following list, and resolves profile activity locally with a v1.3.5 captured API enrichment pipeline and resilient scan recovery.
 
-## What changed in v1.3.4
+## What changed in v1.3.5
 
 - Scan sessions checkpoint automatically so an X load failure can be resumed instead of restarted.
-- The popup now separates scan recovery from enrichment jobs and shows the exact next action.
+- The scanner now treats sustained idle after extracted profiles as end-of-list, so enrichment can start even if X leaves a loading spinner visible.
 - Stale scan sessions recover automatically, helper-tab fallback starts cleanly after API fast path, checkpoint writes cannot overwrite phase transitions, and destructive review actions are blocked until incomplete scans are resolved.
 
 ## Previous resolver changes
@@ -23,7 +23,7 @@ A privacy-first Chrome/Edge extension that scans your X/Twitter **Following** pa
 ## Why it works
 
 X uses a **virtualized React list**: off-screen accounts are unmounted from the DOM.
-FollowGraph still extracts users during the scroll loop when DOM fallback is needed, but v1.3.4 captures real X GraphQL responses in the page context, persists `restId` and embedded activity metadata, and resolves profile activity through X's authenticated web API from the user's own browser session before opening helper tabs.
+FollowGraph still extracts users during the scroll loop when DOM fallback is needed, but v1.3.5 captures real X GraphQL responses in the page context, persists `restId` and embedded activity metadata, and resolves profile activity through X's authenticated web API from the user's own browser session before opening helper tabs.
 
 That removes the old hot path where thousands of accounts each required a rendered profile page, content-script injection, DOM polling, and tab navigation. Protected, suspended, unavailable, and no-post accounts are treated as resolved terminal states instead of failed unknowns.
 
@@ -58,7 +58,7 @@ Load:
 
 1. Open: `https://x.com/<you>/following` or `https://twitter.com/<you>/following`
 2. Click extension icon -> **Scan Following**
-3. Let v1.3.4 stream the list, run captured API enrichment, recover from X load failures, and fall back to helper tabs only where needed
+3. Let v1.3.5 stream the list, run captured API enrichment, recover from X load failures, and fall back to helper tabs only where needed
 4. Export JSON/CSV
 
 ## Benchmark
@@ -75,7 +75,7 @@ npm run benchmark:report
 npm run acceptance:synthetic
 ```
 
-The replay report models the v1.3.4 architecture at 7.5K accounts and writes `reports/latest.json`. The default acceptance gate rejects synthetic reports and fails unless the report resolves at least 90% within 90 minutes for at least 7.5K accounts.
+The replay report models the v1.3.5 architecture at 7.5K accounts and writes `reports/latest.json`. The default acceptance gate rejects synthetic reports and fails unless the report resolves at least 90% within 90 minutes for at least 7.5K accounts.
 
 Replay is not a replacement for a real X run. Real-world proof comes from the exported scan report produced after a live X run. Real-world speed depends on X session health, network latency, API availability, rate limits, and the number of accounts that need DOM fallback.
 

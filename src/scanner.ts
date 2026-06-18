@@ -23,6 +23,8 @@ declare global {
 const SCAN_CHECKPOINT_USER_DELTA = 250;
 const SCAN_CHECKPOINT_INTERVAL_MS = 3000;
 const X_LOAD_RETRY_LIMIT = 3;
+const LOADING_STALL_IDLE_ROUNDS = 8;
+const SOFT_END_IDLE_ROUNDS = 12;
 
 function isFollowingPage(): boolean {
   const hostOk = ["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(location.hostname);
@@ -309,7 +311,14 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
         return "xLoadError";
       }
 
-      if (!tick.progressed && tick.idleRounds >= 8 && hasLoadingIndicator()) {
+      if (!tick.progressed && tick.idleRounds >= LOADING_STALL_IDLE_ROUNDS && hasLoadingIndicator()) {
+        if (extractedTotal > 0) {
+          uiSetStatus("No more profiles are loading. Finishing scan...");
+          if (tick.idleRounds >= SOFT_END_IDLE_ROUNDS) return "idle";
+          void checkpoint(false);
+          return;
+        }
+
         void checkpoint(true, {
           status: "recoverable_error",
           stopReason: "networkStall",

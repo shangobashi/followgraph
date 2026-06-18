@@ -13,7 +13,7 @@ const recomputedResolutionRate = totalAccounts > 0 ? resolved / totalAccounts : 
 const failureReasons = [];
 
 if (report.gitCommit !== currentCommit) failureReasons.push("report-commit-does-not-match-head");
-if (report.version !== "1.3.4") failureReasons.push("report-version-mismatch");
+if (report.version !== "1.3.5") failureReasons.push("report-version-mismatch");
 if (!allowSynthetic && report.mode === "synthetic") failureReasons.push("synthetic-report-not-accepted");
 if (!["live", "replay", "synthetic"].includes(String(report.mode))) failureReasons.push("report-mode-invalid");
 if (report.pass !== true) failureReasons.push("report-pass-field-not-true");
