@@ -1,8 +1,8 @@
 {
   "name": "followgraph",
   "private": true,
-  "version": "1.3.5",
-  "description": "FollowGraph v1.3.5: client-side Following Exporter for X/Twitter with resilient scan recovery and captured API enrichment",
+  "version": "1.3.6",
+  "description": "FollowGraph v1.3.6: client-side Following Exporter for X/Twitter with cursor-aware scan completion and captured API enrichment",
   "author": "Shango Bashi",
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
     "benchmark": "node scripts/benchmark.mjs",
     "benchmark:report": "node scripts/benchmark.mjs --total 7500 --concurrency 64 --latency-ms 350 --resolution-rate 0.9 --max-minutes 90 --min-resolution-rate 0.9 --report reports/latest.json",
     "replay:report": "node scripts/replay-benchmark.mjs --total 7500 --following-resolved 5200 --api-resolved 1550 --dom-resolved 0 --unknown 750 --concurrency 64 --api-latency-ms 420 --max-minutes 90 --min-resolution-rate 0.9 --report reports/latest.json",
+    "test:scan-completion": "node scripts/test-scan-completion.mjs",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch"
   },

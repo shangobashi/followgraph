@@ -1,9 +1,10 @@
 import type { LastScan, Progress, ScanSession, ScanSummary, StopReason } from "./types";
 import { classifyUsers, summarize } from "./activity";
 import { runApiFastPathEnrichment } from "./fastpath";
-import { installFollowingApiCapture, parseFollowingApiUsers } from "./followingApi";
+import { getFollowingPaginationState, installFollowingApiCapture, parseFollowingApiUsers } from "./followingApi";
 import { parseVisibleUsers } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
+import { SCAN_MAX_IDLE_ROUNDS, decideScanIdle } from "./scanCompletion";
 import { UserStore } from "./store";
 import { runScrollLoop } from "./scroller";
 import { ensureUI, uiEnableExport, uiSetFinalStatus, uiSetStatus, uiSetSummary, uiUpdateProgress } from "./ui";
@@ -23,8 +24,6 @@ declare global {
 const SCAN_CHECKPOINT_USER_DELTA = 250;
 const SCAN_CHECKPOINT_INTERVAL_MS = 3000;
 const X_LOAD_RETRY_LIMIT = 3;
-const LOADING_STALL_IDLE_ROUNDS = 8;
-const SOFT_END_IDLE_ROUNDS = 12;
 
 function isFollowingPage(): boolean {
   const hostOk = ["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(location.hostname);
@@ -272,7 +271,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   await checkpoint(true);
 
   const result = await runScrollLoop({
-    maxIdleRounds: 18,
+    maxIdleRounds: SCAN_MAX_IDLE_ROUNDS,
     shouldStop: () => {
       if (window.__FOLLOWGRAPH_SCAN_ABORT__) return "manualPause";
       if (!isFollowingPage()) return "tabNavigated";
@@ -311,22 +310,36 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
         return "xLoadError";
       }
 
-      if (!tick.progressed && tick.idleRounds >= LOADING_STALL_IDLE_ROUNDS && hasLoadingIndicator()) {
-        if (extractedTotal > 0) {
+      if (!tick.progressed) {
+        const loading = hasLoadingIndicator();
+        const idleDecision = decideScanIdle({
+          idleRounds: tick.idleRounds,
+          extractedTotal,
+          loading,
+          pagination: getFollowingPaginationState()
+        });
+
+        if (idleDecision === "complete") {
           uiSetStatus("No more profiles are loading. Finishing scan...");
-          if (tick.idleRounds >= SOFT_END_IDLE_ROUNDS) return "idle";
+          return "idle";
+        }
+
+        if (idleDecision === "continue" && loading) {
+          uiSetStatus("Scanning (waiting for next Following page)...");
           void checkpoint(false);
           return;
         }
 
-        void checkpoint(true, {
+        if (idleDecision === "recoverable_stall") {
+          void checkpoint(true, {
           status: "recoverable_error",
           stopReason: "networkStall",
           error: "The Following page is still loading but no new profiles appeared.",
           canResume: true,
           resumeHint: resumeHint("networkStall")
-        });
-        return "networkStall";
+          });
+          return "networkStall";
+        }
       }
 
       uiSetStatus(tick.progressed ? "Scanning..." : "Scanning (waiting for load)...");

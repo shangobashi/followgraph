@@ -1,4 +1,5 @@
 import type { ActivitySource, ProfileState, User } from "./types";
+import type { FollowingPaginationState } from "./scanCompletion";
 
 type RecordLike = Record<string, unknown>;
 
@@ -26,6 +27,12 @@ declare global {
 const seenUrls = new Set<string>();
 const capturedResponses: CapturedApiResponse[] = [];
 const capturedOperations = new Map<string, CapturedGraphQLOperation>();
+const followingPaginationState: FollowingPaginationState = {
+  responseCount: 0,
+  hasBottomCursor: null,
+  lastResponseAt: null,
+  lastBottomCursorAt: null
+};
 let listenerReady = false;
 
 function cleanText(value?: string | null) {
@@ -58,6 +65,43 @@ function isFollowingApiUrl(urlString: string) {
   } catch {
     return false;
   }
+}
+
+function findBottomCursor(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+
+  const cursorType = String(value.cursorType ?? value.cursor_type ?? "").toLowerCase();
+  const entryId = String(value.entryId ?? value.entry_id ?? "").toLowerCase();
+  const itemType = String(value.__typename ?? value.type ?? "").toLowerCase();
+  const cursorValue =
+    typeof value.value === "string" ? value.value : typeof value.cursor === "string" ? value.cursor : null;
+
+  if ((cursorType === "bottom" || entryId.includes("cursor-bottom")) && (cursorValue || itemType.includes("cursor"))) {
+    return cursorValue ?? "";
+  }
+
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        const cursor = findBottomCursor(item);
+        if (cursor !== null) return cursor;
+      }
+      continue;
+    }
+
+    const cursor = findBottomCursor(child);
+    if (cursor !== null) return cursor;
+  }
+
+  return null;
+}
+
+function rememberFollowingPagination(body: unknown) {
+  const bottomCursor = findBottomCursor(body);
+  followingPaginationState.responseCount += 1;
+  followingPaginationState.hasBottomCursor = bottomCursor !== null;
+  followingPaginationState.lastResponseAt = Date.now();
+  if (bottomCursor !== null) followingPaginationState.lastBottomCursorAt = followingPaginationState.lastResponseAt;
 }
 
 function parseJsonParam(params: URLSearchParams, key: string) {
@@ -195,6 +239,7 @@ function currentFollowingApiUrls() {
 function rememberCapturedResponse(payload: CapturedApiResponse) {
   if (!payload.url || !isXGraphQLUrl(payload.url)) return;
   rememberOperation(payload.url);
+  if (isFollowingApiUrl(payload.url)) rememberFollowingPagination(payload.body);
   capturedResponses.push(payload);
   if (capturedResponses.length > 120) capturedResponses.splice(0, capturedResponses.length - 120);
 }
@@ -224,6 +269,10 @@ export function getCapturedGraphQLOperation(name: string) {
   return capturedOperations.get(name) ?? null;
 }
 
+export function getFollowingPaginationState(): FollowingPaginationState {
+  return { ...followingPaginationState };
+}
+
 export async function parseFollowingApiUsers(): Promise<User[]> {
   const users = new Map<string, User>();
 
@@ -237,7 +286,9 @@ export async function parseFollowingApiUsers(): Promise<User[]> {
       try {
         const response = await fetch(url, { credentials: "include" });
         if (!response.ok) return;
-        collectUsers(await response.json(), users);
+        const body = await response.json();
+        rememberFollowingPagination(body);
+        collectUsers(body, users);
       } catch {
         // Replay can fail for internal API responses; page-world capture remains the primary path.
       }
