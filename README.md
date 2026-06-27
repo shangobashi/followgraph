@@ -1,8 +1,17 @@
-# FollowGraph v1.4.0 beta
+# FollowGraph v1.4.2 beta
 
-A privacy-first Chrome/Edge extension that scans your X/Twitter **Following** page, exports your following list, and resolves profile activity locally with faster incremental scan parsing, captured API enrichment, cursor-aware scan completion, and saved-checkpoint recovery.
+A privacy-first Chrome/Edge extension that scans your X/Twitter **Following** page, exports your following list, and resolves profile activity locally with hardened API enrichment, helper-tab retry, cursor-aware scan completion, and saved-checkpoint recovery.
 
-## What changed in v1.4.0 beta
+## What changed in v1.4.2 beta
+
+- Enrichment now targets 90% success directly, not only 90% overall scan resolution.
+- X GraphQL calls preserve captured/performance-discovered variables and feature flags instead of relying only on hardcoded templates.
+- Helper profile pages install API capture, replay recent GraphQL resources, wait longer, click retry controls, and nudge the timeline before returning `unknown`.
+- Transient `unknown` enrichment results are retried once after other profiles.
+- Helper-tab concurrency is reduced to 6-10 workers to favor successful profile loads over raw tab pressure.
+- Reports and acceptance gates now include `enrichmentSuccessRate`.
+
+## Previous v1.4 scanner changes
 
 - The scanner now parses newly mounted Following cells from the mutation stream instead of fully reparsing the visible list on every scroll tick.
 - A periodic full-parse fallback remains in place to preserve correctness if X changes DOM mounting behavior.
@@ -66,7 +75,7 @@ Load:
 
 1. Open: `https://x.com/<you>/following` or `https://twitter.com/<you>/following`
 2. Click extension icon -> **Scan Following**
-3. Let v1.4.0 beta stream the list incrementally, run captured API enrichment, recover from X load failures, and fall back to helper tabs only where needed
+3. Let v1.4.2 beta stream the list incrementally, run hardened API enrichment, recover from X load failures, and retry helper-tab unknowns where needed
 4. Export JSON/CSV
 
 ## Benchmark
@@ -83,7 +92,7 @@ npm run benchmark:report
 npm run acceptance:synthetic
 ```
 
-The replay report models the v1.4 beta architecture at 7.5K accounts and writes `reports/latest.json`. The default acceptance gate rejects synthetic reports and fails unless the report resolves at least 90% within 90 minutes for at least 7.5K accounts.
+The replay report models the v1.4.2 beta architecture at 7.5K accounts and writes `reports/latest.json`. The default acceptance gate rejects synthetic reports and fails unless the report resolves at least 90% within 90 minutes for at least 7.5K accounts and the modeled enrichment success rate is at least 90%.
 
 Replay is not a replacement for a real X run. Real-world proof comes from the exported scan report produced after a live X run. Real-world speed depends on X session health, network latency, API availability, rate limits, and the number of accounts that need DOM fallback.
 

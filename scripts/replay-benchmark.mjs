@@ -13,6 +13,7 @@ function readArgs(argv) {
     concurrency: 64,
     maxMinutes: 90,
     minResolutionRate: 0.9,
+    minEnrichmentSuccessRate: 0.9,
     report: "reports/latest.json"
   };
 
@@ -30,6 +31,7 @@ function readArgs(argv) {
     else if (key === "--concurrency") out.concurrency = Number.parseInt(value, 10);
     else if (key === "--max-minutes") out.maxMinutes = Number.parseFloat(value);
     else if (key === "--min-resolution-rate") out.minResolutionRate = Number.parseFloat(value);
+    else if (key === "--min-enrichment-success-rate") out.minEnrichmentSuccessRate = Number.parseFloat(value);
     else if (key === "--report") out.report = value;
   }
 
@@ -103,9 +105,13 @@ async function main() {
   const apiBatch = await runTimedBatch(opts.apiResolved, opts.concurrency, opts.apiLatencyMs);
   const elapsedMs = Math.round(apiBatch.elapsedMs + 6 * 60000);
   const resolutionRate = resolved / opts.total;
+  const enrichmentAttempted = opts.apiResolved + opts.domResolved + opts.unknown;
+  const enrichmentSucceeded = opts.apiResolved + opts.domResolved;
+  const enrichmentSuccessRate = enrichmentSucceeded / Math.max(enrichmentAttempted, 1);
   const maxElapsedMs = opts.maxMinutes * 60000;
   const failureReasons = [];
   if (resolutionRate < opts.minResolutionRate) failureReasons.push("resolution-rate-below-threshold");
+  if (enrichmentSuccessRate < opts.minEnrichmentSuccessRate) failureReasons.push("enrichment-success-rate-below-threshold");
   if (elapsedMs > maxElapsedMs) failureReasons.push("elapsed-time-above-threshold");
 
   const report = {
@@ -118,6 +124,10 @@ async function main() {
     totalAccounts: opts.total,
     attempted: opts.total,
     resolved,
+    enrichmentAttempted,
+    enrichmentSucceeded,
+    enrichmentFailed: enrichmentAttempted - enrichmentSucceeded,
+    enrichmentSuccessRate,
     followingResolved: opts.followingResolved,
     apiResolved: opts.apiResolved,
     domResolved: opts.domResolved,
@@ -141,6 +151,7 @@ async function main() {
     },
     thresholds: {
       minResolutionRate: opts.minResolutionRate,
+      minEnrichmentSuccessRate: opts.minEnrichmentSuccessRate,
       maxElapsedMs
     },
     pass: failureReasons.length === 0,

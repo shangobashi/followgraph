@@ -13,6 +13,8 @@ export interface XApiAuthContext {
 interface GraphQLOperation {
   name: OperationName;
   queryId: string;
+  variables?: unknown;
+  features?: unknown;
 }
 
 interface UserLookup {
@@ -31,8 +33,9 @@ type GraphQLData = Record<string, unknown>;
 
 const operationCache = new Map<OperationName, GraphQLOperation>();
 let bearerTokenCache: string | null = null;
-let bearerTokenDiscoveryDone = false;
-let operationDiscoveryDone = false;
+let lastBearerTokenDiscoveryAt = 0;
+
+const TOKEN_DISCOVERY_RETRY_MS = 15_000;
 
 function cleanText(value?: string | null) {
   return (value || "").replace(/\s+/g, " ").trim();
@@ -56,7 +59,8 @@ function findBearerTokenInSource(source: string) {
 
 async function discoverBearerToken() {
   if (bearerTokenCache) return bearerTokenCache;
-  if (bearerTokenDiscoveryDone) return null;
+  if (Date.now() - lastBearerTokenDiscoveryAt < TOKEN_DISCOVERY_RETRY_MS) return null;
+  lastBearerTokenDiscoveryAt = Date.now();
 
   for (const url of currentScriptUrls()) {
     try {
@@ -66,7 +70,6 @@ async function discoverBearerToken() {
       const token = findBearerTokenInSource(source);
       if (token) {
         bearerTokenCache = token;
-        bearerTokenDiscoveryDone = true;
         return token;
       }
     } catch {
@@ -74,7 +77,6 @@ async function discoverBearerToken() {
     }
   }
 
-  bearerTokenDiscoveryDone = true;
   return null;
 }
 
@@ -131,10 +133,45 @@ function findOperationInSource(source: string, name: OperationName): GraphQLOper
   return null;
 }
 
+function operationFromUrl(urlString: string, expectedName?: OperationName): GraphQLOperation | null {
+  try {
+    const url = new URL(urlString);
+    if (!url.pathname.toLowerCase().includes("/i/api/graphql/")) return null;
+    const parts = url.pathname.split("/").filter(Boolean);
+    const queryId = parts.at(-2) || "";
+    const name = parts.at(-1) as OperationName | undefined;
+    if (!queryId || !name || !OPERATION_NAMES.includes(name)) return null;
+    if (expectedName && name !== expectedName) return null;
+    return {
+      name,
+      queryId,
+      variables: safeJsonParse(url.searchParams.get("variables") || ""),
+      features: safeJsonParse(url.searchParams.get("features") || "")
+    };
+  } catch {
+    return null;
+  }
+}
+
+function operationFromPerformance(name: OperationName): GraphQLOperation | null {
+  const urls = performance
+    .getEntriesByType("resource")
+    .map((entry) => entry.name)
+    .filter((url) => url.includes("/i/api/graphql/"))
+    .slice(-120)
+    .reverse();
+
+  for (const url of urls) {
+    const operation = operationFromUrl(url, name);
+    if (operation) return operation;
+  }
+
+  return null;
+}
+
 async function discoverOperations() {
   const missing = OPERATION_NAMES.filter((name) => !operationCache.has(name));
   if (missing.length === 0) return;
-  if (operationDiscoveryDone) return;
 
   const urls = currentScriptUrls();
   for (const url of urls) {
@@ -155,8 +192,6 @@ async function discoverOperations() {
       if (operation) operationCache.set(name, operation);
     }
   }
-
-  operationDiscoveryDone = true;
 }
 
 function graphQLUrl(operation: GraphQLOperation, variables: unknown, features: unknown) {
@@ -168,13 +203,37 @@ function graphQLUrl(operation: GraphQLOperation, variables: unknown, features: u
   return `https://x.com/i/api/graphql/${operation.queryId}/${operation.name}?${params.toString()}`;
 }
 
+function mergeRecord(template: unknown, overrides: Record<string, unknown>) {
+  const base = template && typeof template === "object" && !Array.isArray(template) ? (template as Record<string, unknown>) : {};
+  return { ...base, ...overrides };
+}
+
+function mergeDefaults(defaults: Record<string, unknown>, preferred: unknown) {
+  const overrides = preferred && typeof preferred === "object" && !Array.isArray(preferred) ? (preferred as Record<string, unknown>) : {};
+  return { ...defaults, ...overrides };
+}
+
 function operationByName(name: OperationName): GraphQLOperation | null {
   const cached = operationCache.get(name);
   if (cached) return cached;
 
   const captured = getCapturedGraphQLOperation(name);
-  if (!captured) return null;
-  return { name, queryId: captured.queryId };
+  if (captured) {
+    return {
+      name,
+      queryId: captured.queryId,
+      variables: captured.variables,
+      features: captured.features
+    };
+  }
+
+  const fromPerformance = operationFromPerformance(name);
+  if (fromPerformance) {
+    operationCache.set(name, fromPerformance);
+    return fromPerformance;
+  }
+
+  return null;
 }
 
 async function fetchGraphQL(auth: XApiAuthContext, operation: GraphQLOperation, variables: unknown, features: unknown) {
@@ -373,11 +432,27 @@ function timelineVariables(restId: string) {
   };
 }
 
+function variablesForUserLookup(operation: GraphQLOperation, username: string) {
+  return mergeRecord(operation.variables, userLookupVariables(username));
+}
+
+function featuresForUserLookup(operation: GraphQLOperation) {
+  return mergeDefaults(userFeatures, operation.features);
+}
+
+function variablesForTimeline(operation: GraphQLOperation, restId: string) {
+  return mergeRecord(operation.variables, timelineVariables(restId));
+}
+
+function featuresForTimeline(operation: GraphQLOperation) {
+  return mergeDefaults(timelineFeatures, operation.features);
+}
+
 async function lookupUser(auth: XApiAuthContext, username: string): Promise<UserLookup | null> {
   const operation = operationByName("UserByScreenName");
   if (!operation) return null;
 
-  const data = await fetchGraphQL(auth, operation, userLookupVariables(username), userFeatures);
+  const data = await fetchGraphQL(auth, operation, variablesForUserLookup(operation, username), featuresForUserLookup(operation));
   const restId = firstStringByKey(data, ["rest_id", "id_str"]);
   if (!restId) return null;
   const terminal = terminalStateFromPayload(data);
@@ -392,8 +467,12 @@ async function fetchTimeline(auth: XApiAuthContext, restId: string) {
   const out: TimelineEntry[] = [];
 
   for (const operation of operations) {
-    const data = await fetchGraphQL(auth, operation, timelineVariables(restId), timelineFeatures);
-    out.push(...collectTimelineEntries(data));
+    try {
+      const data = await fetchGraphQL(auth, operation, variablesForTimeline(operation, restId), featuresForTimeline(operation));
+      out.push(...collectTimelineEntries(data));
+    } catch {
+      // Try every available timeline operation; X often breaks one before the other.
+    }
   }
 
   return out;
@@ -408,7 +487,7 @@ export async function resolveProfileActivityViaXApi(
 
   await discoverOperations();
 
-  const lookup = typeof input === "string" || !input.restId ? await lookupUser(auth, username) : null;
+  let lookup = typeof input === "string" || !input.restId ? await lookupUser(auth, username).catch(() => null) : null;
   const restId = typeof input === "string" ? lookup?.restId : input.restId || lookup?.restId;
   if (!restId) return null;
 
@@ -425,6 +504,10 @@ export async function resolveProfileActivityViaXApi(
       profileState: "posts",
       note: "Resolved through X web API fast path."
     };
+  }
+
+  if (!lookup) {
+    lookup = await lookupUser(auth, username).catch(() => null);
   }
 
   if (lookup?.profileState && lookup.profileState !== "unknown") {

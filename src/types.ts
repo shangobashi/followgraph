@@ -90,6 +90,7 @@ export interface QueuedUser {
   username: string;
   displayName: string;
   profileUrl: string;
+  attempts?: number;
 }
 
 export type JobType = "enrich" | "unfollow";

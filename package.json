@@ -1,16 +1,16 @@
 {
   "name": "followgraph",
   "private": true,
-  "version": "1.4.0-beta.1",
-  "description": "FollowGraph v1.4 beta: faster incremental Following scans plus API-first activity enrichment for X/Twitter",
+  "version": "1.4.2-beta.1",
+  "description": "FollowGraph v1.4.2 beta: enrichment-success hardening for X/Twitter activity resolution",
   "author": "Shango Bashi",
   "type": "module",
   "scripts": {
     "acceptance": "node scripts/acceptance-gate.mjs reports/latest.json",
     "acceptance:synthetic": "node scripts/acceptance-gate.mjs reports/latest.json --allow-synthetic",
     "benchmark": "node scripts/benchmark.mjs",
-    "benchmark:report": "node scripts/benchmark.mjs --total 7500 --concurrency 64 --latency-ms 350 --resolution-rate 0.9 --max-minutes 90 --min-resolution-rate 0.9 --report reports/latest.json",
-    "replay:report": "node scripts/replay-benchmark.mjs --total 7500 --following-resolved 5200 --api-resolved 1550 --dom-resolved 0 --unknown 750 --concurrency 64 --api-latency-ms 420 --max-minutes 90 --min-resolution-rate 0.9 --report reports/latest.json",
+    "benchmark:report": "node scripts/benchmark.mjs --total 7500 --concurrency 64 --latency-ms 350 --resolution-rate 0.9 --max-minutes 90 --min-resolution-rate 0.9 --min-enrichment-success-rate 0.9 --report reports/latest.json",
+    "replay:report": "node scripts/replay-benchmark.mjs --total 7500 --following-resolved 5200 --api-resolved 2070 --dom-resolved 0 --unknown 230 --concurrency 64 --api-latency-ms 420 --max-minutes 90 --min-resolution-rate 0.9 --min-enrichment-success-rate 0.9 --report reports/latest.json",
     "test:scan-completion": "node scripts/test-scan-completion.mjs",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch"

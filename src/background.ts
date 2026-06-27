@@ -15,10 +15,11 @@ import { classifyUsers, summarize } from "./activity";
 import { scanSessionBlocksJobs, scanSessionCanBeFinalized } from "./sessionRecovery";
 import { appendUnfollowAudit, loadJobState, loadLastScan, loadScanSession, saveJobState, saveLastScan, saveScanSession } from "./storage";
 
-const ENRICHMENT_DEFAULT_WORKERS = 15;
-const ENRICHMENT_MAX_WORKERS = 20;
+const ENRICHMENT_DEFAULT_WORKERS = 6;
+const ENRICHMENT_MAX_WORKERS = 10;
 const ENRICHMENT_FLUSH_BATCH_SIZE = 50;
 const SCAN_SESSION_STALE_MS = 45_000;
+const ENRICHMENT_UNKNOWN_RETRY_LIMIT = 1;
 
 type LastScanCache = {
   users: ClassifiedUser[];
@@ -87,7 +88,8 @@ function queueFromUsers(users: ClassifiedUser[]) {
     restId: user.restId ?? null,
     username: user.username,
     displayName: user.displayName,
-    profileUrl: user.profileUrl
+    profileUrl: user.profileUrl,
+    attempts: 0
   }));
 }
 
@@ -379,6 +381,34 @@ async function advanceWorker(job: JobState, tabId: number, status: UnfollowResul
   return job;
 }
 
+async function retryCurrentEnrichmentUser(job: JobState, tabId: number, currentUser: QueuedUser, note: string) {
+  const worker = findWorker(job, tabId);
+  if (!worker) return job;
+
+  job.queue.push({
+    ...currentUser,
+    attempts: (currentUser.attempts ?? 0) + 1
+  });
+
+  worker.note = note;
+  worker.updatedAt = Date.now();
+
+  const nextUser = job.queue.shift() || null;
+  if (nextUser) {
+    worker.currentUser = nextUser;
+    worker.phase = "awaiting_navigation";
+    job.message = `Retrying unresolved profile later. Opening @${nextUser.username}. ${note}`;
+    await persistJob(job);
+    await navigateHelperTab(worker.tabId, nextUser.profileUrl);
+    return job;
+  }
+
+  worker.currentUser = null;
+  worker.phase = null;
+  await persistJob(job);
+  return job;
+}
+
 async function continueJobAfterFailure(job: JobState, tabId: number, error: unknown) {
   const note = error instanceof Error ? error.message : "Job step failed.";
   const worker = findWorker(job, tabId);
@@ -434,6 +464,16 @@ async function completeProcessWorker(
 
   if (jobType === "enrich") {
     const r = result as ProfileActivityResult;
+    if (r.profileState === "unknown" && (currentUser.attempts ?? 0) < ENRICHMENT_UNKNOWN_RETRY_LIMIT) {
+      await retryCurrentEnrichmentUser(
+        job,
+        tabId,
+        currentUser,
+        r.note ? `${r.note} Retrying once after other profiles.` : "Profile unresolved. Retrying once after other profiles."
+      );
+      return;
+    }
+
     updateJobTelemetry(job, r);
     await persistActivityResult(currentUser, r);
     await advanceWorker(job, tabId, enrichmentOutcome(r), r.note || "Activity checked.");
