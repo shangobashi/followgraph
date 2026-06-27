@@ -19,6 +19,12 @@ function pageText() {
   return cleanText(document.body?.textContent).toLowerCase();
 }
 
+interface ProfileSignal {
+  text: string;
+  hasTimelineTime: boolean;
+  hasTerminalState: boolean;
+}
+
 function currentUsername(fallback = "") {
   return location.pathname.split("/").filter(Boolean)[0] || fallback;
 }
@@ -34,19 +40,28 @@ function hasTerminalProfileState(text: string) {
   );
 }
 
+function readProfileSignal(): ProfileSignal {
+  const hasTimelineTime = Boolean(document.querySelector("article time[datetime]"));
+  const text = pageText();
+  return {
+    text,
+    hasTimelineTime,
+    hasTerminalState: hasTerminalProfileState(text)
+  };
+}
+
 async function waitForSignal(timeoutMs = 1800) {
   const startedAt = Date.now();
+  let signal = readProfileSignal();
 
   while (Date.now() - startedAt < timeoutMs) {
-    if (document.querySelector("article time[datetime]")) return;
-
-    const text = pageText();
-    if (hasTerminalProfileState(text)) {
-      return;
-    }
+    if (signal.hasTimelineTime || signal.hasTerminalState) return signal;
 
     await sleep(80);
+    signal = readProfileSignal();
   }
+
+  return signal;
 }
 
 function findLatestTimelineTime() {
@@ -92,10 +107,10 @@ export async function extractProfileActivity(
     return apiResult;
   }
 
-  await waitForSignal();
+  let signal = await waitForSignal();
 
   const username = currentUsername(expectedUsername || "");
-  let text = pageText();
+  let text = signal.text;
 
   if (text.includes("posts are protected")) {
     return {
@@ -153,8 +168,8 @@ export async function extractProfileActivity(
   }
 
   // Give slower profiles one shorter second pass without reverting to the old 12s ceiling.
-  await waitForSignal(1800);
-  text = pageText();
+  signal = await waitForSignal(1800);
+  text = signal.text;
   latestTime = findLatestTimelineTime();
 
   if (text.includes("posts are protected")) {

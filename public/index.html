@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="FollowGraph v1.3.7 is a privacy-first browser extension that exports your X/Twitter following graph and resolves profile activity with saved-checkpoint enrichment, cursor-aware scan completion, and captured API enrichment."
+      content="FollowGraph v1.4.0 beta is a privacy-first browser extension that exports your X/Twitter following graph faster with incremental scan parsing, saved-checkpoint recovery, cursor-aware scan completion, and API-first enrichment."
     />
     <meta name="theme-color" content="#07111d" />
-    <title>FollowGraph v1.3.7</title>
+    <title>FollowGraph v1.4.0 beta</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -30,7 +30,7 @@
         <span class="brand-word">FollowGraph</span>
       </a>
       <div class="topbar-actions">
-        <span class="micro-pill">v1.3.7</span>
+        <span class="micro-pill">v1.4 beta</span>
         <span class="micro-pill">Client-side only</span>
         <span class="micro-pill">Chrome + Edge</span>
         <a
@@ -50,12 +50,13 @@
           <p class="eyebrow">Made by Shango Bashi</p>
           <h1 class="hero-title">
             <span class="title-line"><span>Export your following graph</span></span>
-            <span class="title-line accent-line"><span>with captured API enrichment.</span></span>
+            <span class="title-line accent-line"><span>with v1.4 beta speed.</span></span>
           </h1>
           <p class="lede">
-            FollowGraph v1.3.7 streams users out of X's virtualized Following list, checkpoints scans through X load failures, lets saved checkpoints start enrichment, verifies pagination cursors before completing, captures real X API responses,
-            preserves rest IDs, and resolves profile activity through a local scheduler before falling back to helper
-            tabs only where needed.
+            FollowGraph v1.4 beta streams newly mounted users out of X's virtualized Following list, checkpoints scans
+            through X load failures, verifies pagination cursors before completing, captures real X API responses,
+            preserves rest IDs, and resolves profile activity through a local API-first scheduler before falling back to
+            helper tabs only where needed.
           </p>
           <div class="actions">
             <a class="primary" href="./downloads/followgraph-extension.zip" download>Download Extension Zip</a>
@@ -64,6 +65,7 @@
           <div class="trust-row">
             <span>No npm required for install</span>
             <span>Streaming extraction</span>
+            <span>Incremental scan parser</span>
             <span>API-first enrichment</span>
             <span>CSV + JSON export</span>
             <span>Saved locally</span>
@@ -135,7 +137,7 @@
             <div class="scan-foot">
               <div class="foot-row">
                 <span>Stream-safe for React virtualization</span>
-                <span>v1.3.7 cursor-aware resolver</span>
+                <span>v1.4 beta cursor-aware resolver</span>
               </div>
               <div class="scan-track" aria-hidden="true"><span></span></div>
             </div>
@@ -152,11 +154,13 @@
           <h2>Built for X's virtualized list, not for a fantasy DOM.</h2>
           <p>
             Most scrapers wait until scrolling ends. FollowGraph extracts during the scroll loop, dedupes in memory,
-            and in v1.3.7 captures X's own API payloads, keeps rest IDs, recovers interrupted scans, and resolves profile activity from your
-            browser session before falling back to helper tabs for edge cases.
+            and in v1.4 beta parses newly mounted cells once, captures X's own API payloads, keeps rest IDs, recovers
+            interrupted scans, and resolves profile activity from your browser session before falling back to helper tabs
+            for edge cases.
           </p>
           <div class="tag-row">
             <span>Virtualized list aware</span>
+            <span>Incremental scan parser</span>
             <span>Adaptive scroll loop</span>
             <span>API resolver pool</span>
             <span>Progress overlay</span>
@@ -164,9 +168,9 @@
         </article>
 
         <article class="panel panel-stat" data-reveal>
-          <p class="tiny-label">v1.3.7 throughput</p>
-          <strong>Rendered profile pages are no longer the default unit of work.</strong>
-          <span>Large runs use API lanes first and reserve helper tabs for unresolved profiles.</span>
+          <p class="tiny-label">v1.4 beta throughput</p>
+          <strong>Repeated visible-list reparsing is no longer the default unit of work.</strong>
+          <span>Large runs parse new mounts once, use API lanes first, and reserve helper tabs for unresolved profiles.</span>
         </article>
 
         <article class="panel panel-privacy" data-reveal>
@@ -209,7 +213,7 @@
 
           <article class="step">
             <span class="step-index">03</span>
-            <h3>Let v1.3.7 resolve activity through captured API data.</h3>
+            <h3>Let v1.4 beta resolve activity through captured API data.</h3>
             <p>As soon as accounts are captured, FollowGraph uses rest IDs and API lanes first, keeps local snapshots updated in batches, and falls back to helper tabs only where needed.</p>
           </article>
         </div>
@@ -255,11 +259,12 @@
       <div class="modal-backdrop" data-close-install></div>
       <section class="install-modal" role="dialog" aria-modal="true" aria-labelledby="installModalTitle">
         <button class="modal-close" type="button" data-close-install aria-label="Close install instructions">Close</button>
-        <p class="section-label">Install FollowGraph v1.3.7</p>
+        <p class="section-label">Install FollowGraph v1.4 beta</p>
         <h2 id="installModalTitle">A polished install path for both non-devs and developers.</h2>
         <p class="modal-lede">
-          The fastest route is the prebuilt zip. No npm, no local build, no terminal. v1.3.7 ships saved-checkpoint enrichment, cursor-aware scan completion, captured API
-          enrichment by default, and the GitHub path stays available if you want to inspect or modify it.
+          The fastest route is the prebuilt zip. No npm, no local build, no terminal. v1.4 beta ships incremental scan
+          parsing, saved-checkpoint recovery, cursor-aware scan completion, and captured API enrichment by default. The
+          GitHub path stays available if you want to inspect or modify it.
         </p>
 
         <div class="modal-grid">

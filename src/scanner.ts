@@ -2,7 +2,7 @@ import type { LastScan, Progress, ScanSession, ScanSummary, StopReason } from ".
 import { classifyUsers, summarize } from "./activity";
 import { runApiFastPathEnrichment } from "./fastpath";
 import { getFollowingPaginationState, installFollowingApiCapture, parseFollowingApiUsers } from "./followingApi";
-import { parseVisibleUsers } from "./parser";
+import { parseVisibleUsers, processAddedNodes } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
 import { SCAN_MAX_IDLE_ROUNDS, decideScanIdle } from "./scanCompletion";
 import { UserStore } from "./store";
@@ -25,6 +25,8 @@ const SCAN_CHECKPOINT_USER_DELTA = 250;
 const SCAN_CHECKPOINT_INTERVAL_MS = 3000;
 const X_LOAD_RETRY_LIMIT = 3;
 const X_LOAD_RETRY_INTERVAL_MS = 5000;
+const FULL_PARSE_FALLBACK_EVERY_ROUNDS = 25;
+const UI_PROGRESS_INTERVAL_MS = 500;
 
 function isFollowingPage(): boolean {
   const hostOk = ["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(location.hostname);
@@ -196,6 +198,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   let lastCheckpointAt = 0;
   let lastCheckpointSize = 0;
   let lastProgress: Progress | null = null;
+  let lastUiProgressAt = 0;
   let xLoadRetries = 0;
   let lastXLoadRetryAt = 0;
   let checkpointChain: Promise<void> = Promise.resolve();
@@ -281,19 +284,35 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
       });
   }
 
+  function ingestVisibleUsers() {
+    const changed = store.add(parseVisibleUsers());
+    if (changed > 0) updateExtractedTotal();
+    return changed;
+  }
+
+  function ingestAddedNodes(nodes: Iterable<Node>) {
+    const parsed = processAddedNodes(nodes, (user) => {
+      store.addOne(user);
+    });
+    if (parsed > 0) updateExtractedTotal();
+    return parsed;
+  }
+
+  ingestVisibleUsers();
   await checkpoint(true);
 
   const result = await runScrollLoop({
     maxIdleRounds: SCAN_MAX_IDLE_ROUNDS,
+    onNodesAdded: ingestAddedNodes,
     shouldStop: () => {
       if (window.__FOLLOWGRAPH_SCAN_ABORT__) return "manualPause";
       if (!isFollowingPage()) return "tabNavigated";
       return null;
     },
     onTick: (tick) => {
-      const visible = parseVisibleUsers();
-      store.add(visible);
-      updateExtractedTotal();
+      if (extractedTotal === 0 || tick.rounds % FULL_PARSE_FALLBACK_EVERY_ROUNDS === 0 || (!tick.progressed && tick.idleRounds === 1)) {
+        ingestVisibleUsers();
+      }
       harvestApiUsers();
 
       const progress: Progress = {
@@ -302,7 +321,11 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
       };
 
       lastProgress = progress;
-      uiUpdateProgress(progress);
+      const now = performance.now();
+      if (now - lastUiProgressAt >= UI_PROGRESS_INTERVAL_MS || !tick.progressed) {
+        uiUpdateProgress(progress);
+        lastUiProgressAt = now;
+      }
       const issue = detectXLoadIssue();
       if (issue) {
         const now = Date.now();

@@ -36,6 +36,7 @@ function countUserCells(): number {
 
 export async function runScrollLoop(opts: {
   onTick: (p: Omit<Progress, "extractedTotal">) => StopReason | void;
+  onNodesAdded?: (nodes: Iterable<Node>) => number | void;
   shouldStop?: () => StopReason | null;
   scrollStepPx?: number;
   maxIdleRounds?: number;
@@ -69,7 +70,14 @@ export async function runScrollLoop(opts: {
 
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
-      for (const node of Array.from(m.addedNodes)) {
+      const addedNodes = Array.from(m.addedNodes);
+      const parsed = opts.onNodesAdded?.(addedNodes) ?? 0;
+      if (parsed > 0) {
+        newContentSinceLastRound = true;
+        continue;
+      }
+
+      for (const node of addedNodes) {
         if (!(node instanceof HTMLElement)) continue;
         if (node.matches?.('[data-testid="UserCell"]') || node.querySelector?.('[data-testid="UserCell"]')) {
           newContentSinceLastRound = true;
