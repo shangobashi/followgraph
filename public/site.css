@@ -219,6 +219,30 @@ ol {
   color: var(--muted);
 }
 
+.hero-trust,
+.cta-note,
+.section-note {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.hero-trust {
+  max-width: 38rem;
+  margin-top: 14px;
+  color: rgba(238, 246, 255, 0.9);
+  font-weight: 700;
+}
+
+.cta-note {
+  margin-top: 12px;
+  font-size: 0.94rem;
+}
+
+.section-note {
+  max-width: 58rem;
+  margin-top: 22px;
+}
+
 .actions,
 .install-actions,
 .modal-actions {
