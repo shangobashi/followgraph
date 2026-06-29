@@ -5,22 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="FollowGraph is a free early beta Chrome and Edge extension that lets you export your X/Twitter following graph privately as CSV and JSON. No OAuth. No server. No tracking."
+      content="FollowGraph is a free early beta Chrome and Edge extension that helps you export, audit, and clean up your X/Twitter following graph privately as CSV and JSON. No OAuth. No server upload. No tracking."
     />
     <meta property="og:title" content="FollowGraph" />
     <meta
       property="og:description"
-      content="Free early beta to export and audit your X/Twitter following graph privately."
+      content="Export, audit, and clean up your X/Twitter following graph privately. Free early beta for Chrome and Edge."
     />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="FollowGraph" />
     <meta
       name="twitter:description"
-      content="Free early beta to export and audit your X/Twitter following graph privately."
+      content="Export, audit, and clean up your X/Twitter following graph privately. Free early beta for Chrome and Edge."
     />
     <meta name="theme-color" content="#07111d" />
-    <title>FollowGraph | Free X/Twitter Following Export Tool</title>
+    <title>FollowGraph | Export and Clean Up Your X Following Graph</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -59,15 +59,19 @@
         <div class="hero-copy">
           <p class="eyebrow">Free early beta &middot; Made by Shango Bashi</p>
           <h1 class="hero-title">
-            <span class="title-line"><span>Export your X following graph</span></span>
-            <span class="title-line accent-line"><span>before the feed swallows it.</span></span>
+            <span class="title-line"><span>Clean up your X following graph</span></span>
+            <span class="title-line accent-line"><span>without living inside the scroll.</span></span>
           </h1>
           <p class="lede">
-            FollowGraph is a free early beta browser extension for Chrome and Edge. It scans your X/Twitter Following
-            page, captures your following graph locally, enriches it with useful activity signals, and exports clean CSV
-            + JSON files you can actually work with.
+            I built FollowGraph after hitting a Following limit on X and realizing the manual cleanup process was
+            ridiculous: endless scrolling, opening profiles one by one, checking activity, guessing who still mattered,
+            and losing track halfway through.
           </p>
-          <p class="hero-trust">No OAuth. No server. No tracking. Your graph stays on your machine.</p>
+          <p class="lede lede-secondary">
+            FollowGraph turns your X/Twitter Following page into a clean CSV/JSON export you can sort, filter, inspect,
+            and use.
+          </p>
+          <p class="hero-trust">No OAuth. No server upload. No tracking. Your graph stays on your machine.</p>
           <div class="actions">
             <a class="primary" href="./downloads/followgraph-extension.zip" download>Download Extension Zip</a>
             <a
@@ -79,10 +83,10 @@
               View Source on GitHub
             </a>
           </div>
-          <p class="cta-note">Unzip, load unpacked, scan your Following page. No npm required.</p>
+          <p class="cta-note">Unzip, load unpacked, open your Following page, start the scan.</p>
           <div class="trust-row">
             <span>No OAuth</span>
-            <span>No server</span>
+            <span>No server upload</span>
             <span>No tracking</span>
             <span>Chrome + Edge</span>
             <span>X/Twitter Following page</span>
@@ -168,136 +172,175 @@
 
       <section class="signal-grid">
         <article class="panel panel-story" data-reveal>
-          <p class="section-label">Why it lands</p>
-          <h2>Built for the way X actually loads your following list.</h2>
+          <p class="section-label">Problem</p>
+          <h2>The Following limit turns your graph into a chore.</h2>
           <p>
-            X does not expose your full Following page as one simple static list. Accounts appear and disappear as the
-            page scrolls. FollowGraph extracts accounts during the scroll loop, dedupes them locally, saves progress as
-            it goes, and then resolves profile activity through a hardened enrichment pipeline.
+            When you hit a Following limit on X, the obvious fix is to unfollow accounts. But the actual workflow is
+            awful. You scroll through an endless virtualized list. You open accounts one by one. You check who is
+            inactive. You try to remember why you followed someone. You remove a few accounts. Then you lose track and
+            start guessing.
+          </p>
+          <p>
+            That is not graph management. That is manual excavation. FollowGraph fixes the painful part: it turns the
+            Following page into a file you can actually work with.
           </p>
           <div class="tag-row">
-            <span>Virtualized-list aware</span>
-            <span>Incremental scanning</span>
-            <span>Local checkpoint recovery</span>
-            <span>Activity enrichment</span>
+            <span>Turn endless scroll into data</span>
+            <span>Sort and filter outside X</span>
+            <span>Inspect before deciding</span>
+            <span>Keep a portable archive</span>
             <span>CSV + JSON export</span>
-            <span>Progress overlay</span>
           </div>
         </article>
 
         <article class="panel panel-stat" data-reveal>
-          <p class="tiny-label">Free early beta</p>
-          <strong>Export, audit, and understand the graph you already built.</strong>
-          <span>Turn a messy Following page into a private file you can inspect, filter, archive, or analyze.</span>
+          <p class="tiny-label">Product</p>
+          <strong>From endless scroll to usable graph.</strong>
+          <span>FollowGraph scans your Following page, extracts accounts during the scroll loop, dedupes locally, saves progress, enriches useful activity signals, and exports CSV/JSON.</span>
         </article>
 
         <article class="panel panel-privacy" data-reveal>
-          <p class="tiny-label">Privacy model</p>
-          <strong>FollowGraph runs in your browser.</strong>
-          <span>Your following graph is scanned locally, saved locally, and exported locally. No OAuth, backend database, or remote enrichment server.</span>
+          <p class="tiny-label">Cleanup</p>
+          <strong>FollowGraph does the ugly part for you.</strong>
+          <span>Turn the trapped list into data so you can sort, filter, audit, and decide who still belongs in your graph.</span>
         </article>
 
         <article class="panel panel-export" data-reveal>
-          <p class="tiny-label">Output you can use</p>
-          <strong>CSV for spreadsheets. JSON for systems.</strong>
-          <span>Use CSV for quick review, or JSON for scripts, dashboards, notebooks, databases, and your own analysis pipeline.</span>
+          <p class="tiny-label">Output</p>
+          <strong>Export files you can actually use.</strong>
+          <span>CSV is ideal for spreadsheets, sorting, filtering, quick cleanup, and manual review. JSON is ideal for scripts, notebooks, dashboards, databases, or deeper graph analysis.</span>
         </article>
 
         <article class="panel panel-memory" data-reveal>
-          <p class="tiny-label">Portable graph</p>
-          <strong>Leave with a file, not a trapped social graph.</strong>
-          <span>FollowGraph gives you clean CSV/JSON exports instead of making your network context depend on a scrolling feed.</span>
+          <p class="tiny-label">Private by default</p>
+          <strong>No OAuth, no server upload, no tracking.</strong>
+          <span>Your Following page is scanned locally. Progress is saved locally. Exports are generated locally.</span>
         </article>
+      </section>
+
+      <section class="workflow" data-reveal>
+        <div class="section-header">
+          <p class="section-label">Product</p>
+          <h2>From endless scroll to usable graph.</h2>
+        </div>
+
+        <div class="step-grid">
+          <article class="step">
+            <span class="step-index">01</span>
+            <h3>Export your Following graph.</h3>
+            <p>Scan your X/Twitter Following page and preserve the result as CSV and JSON.</p>
+          </article>
+
+          <article class="step">
+            <span class="step-index">02</span>
+            <h3>Sort and filter outside X.</h3>
+            <p>Identify stale, inactive, or low-signal follows faster in spreadsheets, scripts, notebooks, dashboards, or databases.</p>
+          </article>
+
+          <article class="step">
+            <span class="step-index">03</span>
+            <h3>Resume from local progress.</h3>
+            <p>If a scan is interrupted, FollowGraph can use local progress instead of forcing you to start from zero.</p>
+          </article>
+        </div>
+
+        <p class="section-note">
+          You can then sort, filter, inspect, archive, analyze, or use the export to decide who still belongs in your
+          graph.
+        </p>
+      </section>
+
+      <section class="workflow" data-reveal>
+        <div class="section-header">
+          <p class="section-label">Why I built it</p>
+          <h2>Built from a real pain point.</h2>
+        </div>
+
+        <div class="step-grid">
+          <article class="step">
+            <span class="step-index">01</span>
+            <h3>I needed it myself.</h3>
+            <p>I hit a Following limit on X. The only obvious path was manual cleanup: scroll forever, open profiles, check activity, guess who still mattered, and unfollow accounts one by one.</p>
+          </article>
+
+          <article class="step">
+            <span class="step-index">02</span>
+            <h3>That process felt broken.</h3>
+            <p>Making decisions inside an infinite scroll is slow, lossy, and easy to abandon halfway through.</p>
+          </article>
+
+          <article class="step">
+            <span class="step-index">03</span>
+            <h3>FollowGraph makes it sane.</h3>
+            <p>It does the ugly part first: turning your trapped Following list into clean, portable data you can inspect properly.</p>
+          </article>
+        </div>
       </section>
 
       <section class="workflow" data-reveal>
         <div class="section-header">
           <p class="section-label">Who it is for</p>
-          <h2>For people whose X graph is part of their work.</h2>
+          <h2>For anyone whose graph matters.</h2>
         </div>
 
         <div class="step-grid">
           <article class="step">
             <span class="step-index">01</span>
-            <h3>Creators</h3>
-            <p>Audit who you follow and keep a usable snapshot of the network behind your feed.</p>
+            <h3>Creators and power users</h3>
+            <p>Clean up noisy follows, preserve the network behind your feed, and finally understand what you have been building for years.</p>
           </article>
 
           <article class="step">
             <span class="step-index">02</span>
-            <h3>Researchers</h3>
-            <p>Build cleaner source lists and preserve useful network context before it disappears into the scroll.</p>
+            <h3>Researchers and journalists</h3>
+            <p>Build cleaner source lists and track institutions, experts, and beat-specific accounts with a portable file.</p>
           </article>
 
           <article class="step">
             <span class="step-index">03</span>
-            <h3>Operators</h3>
-            <p>Map a market, inspect accounts, and turn a messy Following page into a file you control.</p>
+            <h3>Founders, operators, analysts</h3>
+            <p>Map markets, inspect attention networks, and keep useful community context outside the feed.</p>
           </article>
         </div>
 
         <p class="section-note">
-          Journalists, analysts, founders, and anyone with a serious follow graph can use FollowGraph to export and
-          inspect their own X/Twitter Following page privately.
+          Your following graph is not just a list. It is a map of your attention.
         </p>
       </section>
 
       <section class="workflow" data-reveal>
         <div class="section-header">
-          <p class="section-label">What early beta means</p>
-          <h2>Free while the product is hardened in public.</h2>
+          <p class="section-label">Privacy</p>
+          <h2>Private by default.</h2>
         </div>
 
         <div class="step-grid">
           <article class="step">
             <span class="step-index">01</span>
-            <h3>Built for large lists</h3>
-            <p>The scanner is already built for large X/Twitter following lists, streaming extraction, saved local progress, and CSV/JSON export.</p>
+            <h3>Local scan</h3>
+            <p>FollowGraph runs in your browser and scans your own Following page locally.</p>
           </article>
 
           <article class="step">
             <span class="step-index">02</span>
-            <h3>X changes often</h3>
-            <p>Edge cases can break when X changes its interface. If a scan behaves strangely, report the issue, browser, rough graph size, and screenshot if possible.</p>
+            <h3>Local progress</h3>
+            <p>Progress is saved locally so interrupted scans can be handled without uploading your graph.</p>
           </article>
 
           <article class="step">
             <span class="step-index">03</span>
-            <h3>No affiliation</h3>
-            <p>FollowGraph is not affiliated with X or Twitter. It does not automate following, unfollowing, liking, posting, or messaging.</p>
+            <h3>Local export</h3>
+            <p>Exports are generated locally. There is no OAuth login, backend graph database, server-side enrichment pipeline, or analytics system collecting your following list.</p>
           </article>
         </div>
-
-        <p class="section-note">
-          FollowGraph only helps you export and inspect your own following graph. It is not an engagement automation
-          tool and does not access other people's private data.
-        </p>
-      </section>
-
-      <section class="workflow" data-reveal>
-        <div class="section-header">
-          <p class="section-label">How it feels</p>
-          <h2>A small, sharp workflow designed like a tool.</h2>
-        </div>
-
-        <div class="step-grid">
-          <article class="step">
-            <span class="step-index">01</span>
-            <h3>Open your Following page.</h3>
-            <p>Go to `x.com/&lt;you&gt;/following` or `twitter.com/&lt;you&gt;/following` and let the extension target the live page.</p>
-          </article>
-
-          <article class="step">
-            <span class="step-index">02</span>
-            <h3>Trigger the scan.</h3>
-            <p>The popup injects only when you ask. The overlay reports extraction, delay, idle rounds, and live counts.</p>
-          </article>
-
-          <article class="step">
-            <span class="step-index">03</span>
-            <h3>Let v1.4.2 beta resolve activity through captured API data.</h3>
-            <p>As soon as accounts are captured, FollowGraph uses rest IDs and API lanes first, keeps local snapshots updated in batches, and falls back to helper tabs only where needed.</p>
-          </article>
+        <div class="tag-row tag-row-spaced">
+          <span>No OAuth</span>
+          <span>No server upload</span>
+          <span>No tracking</span>
+          <span>No remote graph database</span>
+          <span>Local scan</span>
+          <span>Local progress</span>
+          <span>Local export</span>
         </div>
       </section>
 
@@ -306,8 +349,9 @@
           <p class="section-label">Install</p>
           <h2>Install in two minutes.</h2>
           <p>
-            The fastest path is the prebuilt zip. Download it, unzip it, enable Developer Mode in Chrome or Edge, and
-            load the unpacked extension folder. Developers can inspect the source or build it locally from GitHub.
+            FollowGraph is currently distributed as a prebuilt extension zip while the product is in early beta. Download
+            it, unzip it, enable Developer Mode in Chrome or Edge, and load the unpacked extension folder. Developers can
+            inspect the source or build it locally from GitHub.
           </p>
           <div class="install-actions">
             <a class="primary compact" href="./downloads/followgraph-extension.zip" download>Download Prebuilt Zip</a>
@@ -335,28 +379,64 @@
             <li>Enable Developer Mode.</li>
             <li>Click Load unpacked.</li>
             <li>Select the unzipped extension/ folder.</li>
-            <li>Open your X/Twitter Following page and start the scan from the extension popup.</li>
+            <li>Open your X/Twitter Following page.</li>
+            <li>Start the scan from the extension popup.</li>
           </ol>
         </div>
       </section>
 
       <section class="workflow" data-reveal>
         <div class="section-header">
-          <p class="section-label">Help shape the beta</p>
-          <h2>Real follow graphs are messy. Useful feedback beats private polishing.</h2>
+          <p class="section-label">Beta</p>
+          <h2>Free early beta.</h2>
         </div>
         <p class="section-note">
-          Try FollowGraph on your own X/Twitter Following page. If something breaks, report the rough graph size,
-          browser, version, and what happened.
+          FollowGraph is free during early beta because real graphs are the only honest test. The scanner is already
+          built for virtualized Following lists, incremental extraction, local checkpointing, enrichment, and CSV/JSON
+          export. But X changes its interface often. Edge cases can break.
         </p>
         <div class="install-actions">
+          <a class="primary compact" href="./downloads/followgraph-extension.zip" download>Try the beta</a>
           <a
-            class="primary compact"
+            class="secondary compact"
+            href="https://github.com/shangobashi/followgraph/issues"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            Report an issue
+          </a>
+        </div>
+      </section>
+
+      <section class="workflow" data-reveal>
+        <div class="section-header">
+          <p class="section-label">Disclaimer</p>
+          <h2>Not affiliated with X or Twitter.</h2>
+        </div>
+        <p class="section-note">
+          FollowGraph is an independent ISSA LABS project. It is not affiliated with, endorsed by, or sponsored by X or
+          Twitter. FollowGraph does not post, like, message, follow, or unfollow on your behalf. It helps you export and
+          inspect your own Following graph so you can make better decisions yourself.
+        </p>
+      </section>
+
+      <section class="workflow footer-cta" data-reveal>
+        <div class="section-header">
+          <p class="section-label">Get your graph back</p>
+          <h2>Stop cleaning your Following list through an endless scroll.</h2>
+        </div>
+        <p class="section-note">
+          Export the graph, inspect it properly, and decide what still belongs.
+        </p>
+        <div class="install-actions">
+          <a class="primary compact" href="./downloads/followgraph-extension.zip" download>Download Extension Zip</a>
+          <a
+            class="secondary compact"
             href="https://github.com/shangobashi/followgraph"
             target="_blank"
             rel="noreferrer noopener"
           >
-            Report an Issue on GitHub
+            View Source on GitHub
           </a>
         </div>
       </section>
@@ -384,7 +464,8 @@
               <li>Enable Developer Mode.</li>
               <li>Click Load unpacked.</li>
               <li>Select the unzipped extension/ folder.</li>
-              <li>Open your X/Twitter Following page and start the scan from the extension popup.</li>
+              <li>Open your X/Twitter Following page.</li>
+              <li>Start the scan from the extension popup.</li>
             </ol>
           </article>
 
@@ -392,11 +473,12 @@
             <p class="tiny-label">Developer install</p>
             <strong>Run the source build yourself.</strong>
             <ol>
-              <li>Clone the repository from GitHub.</li>
-              <li>Run `npm install`.</li>
-              <li>Run `npm run build`.</li>
-              <li>Load the generated `extension/` folder as unpacked.</li>
-              <li>Open x.com/&lt;you&gt;/following and start the scan.</li>
+              <li>Open the GitHub repository.</li>
+              <li>Clone the repo.</li>
+              <li>Run npm install.</li>
+              <li>Run npm run build.</li>
+              <li>Load the generated extension folder as unpacked.</li>
+              <li>Open your X/Twitter Following page and start the scan.</li>
             </ol>
           </article>
         </div>

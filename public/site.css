@@ -219,6 +219,10 @@ ol {
   color: var(--muted);
 }
 
+.lede-secondary {
+  margin-top: 14px;
+}
+
 .hero-trust,
 .cta-note,
 .section-note {
@@ -655,6 +659,10 @@ ol {
   line-height: 1.7;
 }
 
+.panel p + p {
+  margin-top: 14px;
+}
+
 .panel-story {
   grid-column: span 6;
   min-height: 290px;
@@ -665,6 +673,10 @@ ol {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 26px;
+}
+
+.tag-row-spaced {
+  margin-top: 24px;
 }
 
 .panel-stat,
