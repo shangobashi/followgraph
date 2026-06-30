@@ -171,11 +171,11 @@ ol {
 }
 
 .hero {
-  padding: 56px 0 30px;
+  padding: 40px 0 34px;
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
   gap: 34px;
-  align-items: center;
+  align-items: start;
 }
 
 .eyebrow,
@@ -190,9 +190,10 @@ ol {
 .hero-title {
   margin-top: 18px;
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
-  font-size: clamp(3.4rem, 8vw, 6.6rem);
-  line-height: 0.94;
-  letter-spacing: -0.07em;
+  max-width: 13ch;
+  font-size: clamp(2.9rem, 4.75vw, 4.7rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
 }
 
 .title-line {
@@ -213,14 +214,14 @@ ol {
 
 .lede {
   max-width: 41rem;
-  margin-top: 22px;
-  font-size: clamp(1.08rem, 2.25vw, 1.28rem);
-  line-height: 1.7;
+  margin-top: 18px;
+  font-size: clamp(1.01rem, 1.48vw, 1.12rem);
+  line-height: 1.52;
   color: var(--muted);
 }
 
 .lede-secondary {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .hero-trust,
@@ -238,7 +239,7 @@ ol {
 }
 
 .cta-note {
-  margin-top: 12px;
+  margin-top: 16px;
   font-size: 0.94rem;
 }
 
@@ -253,7 +254,7 @@ ol {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  margin-top: 28px;
+  margin-top: 24px;
 }
 
 .primary,
@@ -335,9 +336,10 @@ ol {
 
 .hero-visual {
   position: relative;
-  min-height: 560px;
+  min-height: 540px;
   display: grid;
   place-items: center;
+  padding-top: 24px;
 }
 
 .visual-orbit {
@@ -973,7 +975,10 @@ body.modal-open {
   }
 
   .hero-title {
-    font-size: clamp(2.9rem, 16vw, 4.4rem);
+    max-width: 10ch;
+    font-size: clamp(2.55rem, 11.5vw, 3.35rem);
+    line-height: 1;
+    letter-spacing: -0.052em;
   }
 
   .actions,
