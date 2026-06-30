@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="FollowGraph is a privacy-first Chrome and Edge extension for exporting, auditing, and analyzing X/Twitter following graphs as CSV and JSON. Client-side scanning, local progress, no OAuth, no server upload."
+      content="FollowGraph is a privacy-first Chrome and Edge extension for exporting, auditing, and analyzing X/Twitter following graphs as CSV and JSON. Client-side scanning, local progress, no separate OAuth login, no server upload."
     />
     <meta property="og:title" content="FollowGraph" />
     <meta
@@ -69,10 +69,10 @@
           </p>
           <p class="lede lede-secondary">
             Built for users who have outgrown manual graph cleanup, FollowGraph makes it easier to review large
-            following lists, identify stale or low-signal accounts, preserve network context, and understand the
+            following lists, identify inactive or potentially stale accounts, preserve network context, and understand the
             attention graph behind the feed.
           </p>
-          <p class="hero-trust">No OAuth. No server upload. No tracking. Your graph stays local.</p>
+          <p class="hero-trust">No separate OAuth login. No server upload. No tracking. Your graph stays local.</p>
           <div class="actions">
             <a class="primary" href="./downloads/followgraph-extension.zip" download>Download Extension Zip</a>
             <a
@@ -90,7 +90,7 @@
             <span>Client-side scanning</span>
             <span>Local progress recovery</span>
             <span>Chrome + Edge</span>
-            <span>No OAuth</span>
+            <span>No separate OAuth login</span>
             <span>No server upload</span>
           </div>
         </div>
@@ -166,7 +166,7 @@
             </div>
           </article>
 
-          <div class="float-note note-one">No OAuth</div>
+          <div class="float-note note-one">No OAuth login</div>
           <div class="float-note note-two">CSV + JSON</div>
         </div>
       </section>
@@ -246,7 +246,7 @@
           <article class="step">
             <span class="step-index">04</span>
             <h3>Support cleanup decisions</h3>
-            <p>Identify stale, inactive, duplicated, or low-signal follows faster, then decide what still belongs.</p>
+            <p>Identify inactive or potentially stale follows faster, then decide what still belongs.</p>
           </article>
 
           <article class="step">
@@ -289,13 +289,13 @@
           <article class="step">
             <span class="step-index">03</span>
             <h3>Founders and investors</h3>
-            <p>Map markets, communities, builders, analysts, institutions, and emerging attention clusters.</p>
+            <p>Map markets, communities, builders, analysts, institutions, and emerging attention patterns.</p>
           </article>
 
           <article class="step">
             <span class="step-index">04</span>
             <h3>Analysts and power users</h3>
-            <p>Turn a large following list into structured data for filtering, scoring, archiving, or deeper graph analysis.</p>
+            <p>Turn a large following list into structured data for filtering, scoring, archiving, or external graph analysis.</p>
           </article>
         </div>
 
@@ -324,7 +324,7 @@
           <span>Local progress storage</span>
           <span>CSV and JSON output</span>
           <span>Chrome and Edge extension support</span>
-          <span>No OAuth dependency</span>
+          <span>No separate OAuth login dependency</span>
           <span>No backend graph database</span>
         </div>
       </section>
@@ -345,7 +345,7 @@
           <article class="step">
             <span class="step-index">01</span>
             <h3>No account handoff</h3>
-            <p>No OAuth login, no account credential collection, and no remote account connection.</p>
+            <p>No separate OAuth login, no account credential collection, and no remote account connection.</p>
           </article>
 
           <article class="step">
@@ -361,7 +361,7 @@
           </article>
         </div>
         <div class="tag-row tag-row-spaced">
-          <span>No OAuth login</span>
+          <span>No separate OAuth login</span>
           <span>No server upload</span>
           <span>No account credential collection</span>
           <span>No backend graph storage</span>
@@ -397,7 +397,7 @@
           <article class="step">
             <span class="step-index">02</span>
             <h3>JSON for systems</h3>
-            <p>JSON is ideal for scripts, notebooks, databases, dashboards, and graph analysis.</p>
+            <p>JSON is ideal for scripts, notebooks, databases, dashboards, and external graph analysis workflows.</p>
           </article>
 
           <article class="step">
@@ -426,7 +426,7 @@
           <span>Local progress</span>
           <span>CSV/JSON export</span>
           <span>Chrome/Edge installation</span>
-          <span>No OAuth</span>
+          <span>No separate OAuth login</span>
           <span>No tracking</span>
         </div>
         <div class="install-actions">
@@ -496,8 +496,9 @@
           X or Twitter.
         </p>
         <p class="section-note">
-          FollowGraph does not post, like, message, follow, or unfollow on the user&apos;s behalf. It helps users export
-          and inspect their own following graph so they can make better decisions themselves.
+          FollowGraph does not automatically post, like, message, follow, or unfollow. Unfollow actions, where used,
+          require explicit user selection and confirmation. FollowGraph helps users export and inspect their own
+          following graph so they can make better decisions themselves.
         </p>
       </section>
 
