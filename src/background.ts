@@ -16,8 +16,8 @@ import { classifyUsers, summarize } from "./activity";
 import { scanSessionBlocksJobs, scanSessionCanBeFinalized } from "./sessionRecovery";
 import { appendUnfollowAudit, loadJobState, loadLastScan, loadScanSession, saveJobState, saveLastScan, saveScanSession } from "./storage";
 
-const ENRICHMENT_DEFAULT_WORKERS = 10;
-const ENRICHMENT_MAX_WORKERS = 16;
+const ENRICHMENT_DEFAULT_WORKERS = 8;
+const ENRICHMENT_MAX_WORKERS = 12;
 const ENRICHMENT_FLUSH_BATCH_SIZE = 100;
 const SCAN_SESSION_STALE_MS = 45_000;
 const ENRICHMENT_UNKNOWN_RETRY_LIMIT = 1;
@@ -288,6 +288,10 @@ async function navigateHelperTab(tabId: number, url: string) {
   await chrome.tabs.update(tabId, { url });
 }
 
+function sameQueuedUser(a: QueuedUser | null, b: QueuedUser) {
+  return Boolean(a && normalizeUsername(a.username) === normalizeUsername(b.username));
+}
+
 async function helperTabMatchesCurrentUser(tabId: number, currentUser: QueuedUser | null) {
   if (!currentUser) return false;
 
@@ -357,6 +361,70 @@ async function persistUnfollowResult(queueUser: QueuedUser, result: UnfollowResu
   await appendUnfollowAudit([auditEntry]);
 }
 
+async function handOffWorkerToNavigation(job: JobState, tabId: number, note: string) {
+  const worker = findWorker(job, tabId);
+  if (!worker?.currentUser) return;
+
+  worker.phase = "awaiting_navigation";
+  worker.note = note;
+  worker.updatedAt = Date.now();
+  job.message = `API relay could not resolve @${worker.currentUser.username}. Checking its profile page...`;
+  await persistJob(job);
+  await navigateHelperTab(tabId, worker.currentUser.profileUrl);
+}
+
+function scheduleApiRelay(jobId: string, tabId: number) {
+  void (async () => {
+    const context = await runSerialized(async () => {
+      const job = await loadJobState();
+      if (!job || job.id !== jobId || job.status !== "running" || job.type !== "enrich") return null;
+
+      const worker = findWorker(job, tabId);
+      if (!worker?.currentUser || worker.phase !== "api_processing") return null;
+      return { currentUser: worker.currentUser };
+    });
+
+    if (!context) return;
+
+    try {
+      // The scanner stays injected after the bootstrap profile. This is an idempotent recovery for suspended tabs.
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["scanner.js"] });
+      const result = (await chrome.tabs.sendMessage(tabId, {
+        action: "FOLLOWGRAPH_GET_PROFILE_ACTIVITY_API_ONLY",
+        username: context.currentUser.username,
+        restId: context.currentUser.restId ?? null
+      })) as ProfileActivityResult | null;
+
+      await runSerialized(async () => {
+        const job = await loadJobState();
+        if (!job || job.id !== jobId || job.status !== "running" || job.type !== "enrich") return;
+
+        const worker = findWorker(job, tabId);
+        if (!worker || worker.phase !== "api_processing" || !sameQueuedUser(worker.currentUser, context.currentUser)) return;
+
+        if (!result || result.profileState === "unknown") {
+          await handOffWorkerToNavigation(job, tabId, "No activity result from the API relay.");
+          return;
+        }
+
+        updateJobTelemetry(job, result);
+        await persistActivityResult(context.currentUser, result);
+        await advanceWorker(job, tabId, enrichmentOutcome(result), result.note || "Resolved through the API relay.");
+      });
+    } catch (error) {
+      await runSerialized(async () => {
+        const job = await loadJobState();
+        if (!job || job.id !== jobId || job.status !== "running" || job.type !== "enrich") return;
+
+        const worker = findWorker(job, tabId);
+        if (!worker || worker.phase !== "api_processing" || !sameQueuedUser(worker.currentUser, context.currentUser)) return;
+        const note = error instanceof Error ? error.message : "API relay failed.";
+        await handOffWorkerToNavigation(job, tabId, note);
+      });
+    }
+  })();
+}
+
 async function advanceWorker(job: JobState, tabId: number, status: UnfollowResultStatus, note: string) {
   const worker = findWorker(job, tabId);
   if (!worker) return job;
@@ -372,12 +440,19 @@ async function advanceWorker(job: JobState, tabId: number, status: UnfollowResul
   const nextUser = job.queue.shift() || null;
   if (nextUser) {
     worker.currentUser = nextUser;
-    worker.phase = "awaiting_navigation";
-    job.message = `${job.type === "enrich" ? "Opening" : "Reviewing"} @${nextUser.username}. ${note}`;
+    const useApiRelay = job.type === "enrich" && worker.apiReady;
+    worker.phase = useApiRelay ? "api_processing" : "awaiting_navigation";
+    job.message = useApiRelay
+      ? `Resolving @${nextUser.username} through the API relay. ${note}`
+      : `${job.type === "enrich" ? "Opening" : "Reviewing"} @${nextUser.username}. ${note}`;
 
     await flushLastScanCache(false);
     await persistJob(job);
-    await navigateHelperTab(worker.tabId, nextUser.profileUrl);
+    if (useApiRelay) {
+      scheduleApiRelay(job.id, worker.tabId);
+    } else {
+      await navigateHelperTab(worker.tabId, nextUser.profileUrl);
+    }
     return job;
   }
 
@@ -415,10 +490,17 @@ async function retryCurrentEnrichmentUser(job: JobState, tabId: number, currentU
   const nextUser = job.queue.shift() || null;
   if (nextUser) {
     worker.currentUser = nextUser;
-    worker.phase = "awaiting_navigation";
-    job.message = `Retrying unresolved profile later. Opening @${nextUser.username}. ${note}`;
+    const useApiRelay = Boolean(worker.apiReady);
+    worker.phase = useApiRelay ? "api_processing" : "awaiting_navigation";
+    job.message = useApiRelay
+      ? `Retrying unresolved profile through the API relay: @${nextUser.username}. ${note}`
+      : `Retrying unresolved profile later. Opening @${nextUser.username}. ${note}`;
     await persistJob(job);
-    await navigateHelperTab(worker.tabId, nextUser.profileUrl);
+    if (useApiRelay) {
+      scheduleApiRelay(job.id, worker.tabId);
+    } else {
+      await navigateHelperTab(worker.tabId, nextUser.profileUrl);
+    }
     return job;
   }
 
@@ -437,6 +519,7 @@ async function continueJobAfterFailure(job: JobState, tabId: number, error: unkn
   }
 
   if (job.type === "enrich") {
+    worker.apiReady = true;
     await persistActivityResult(worker.currentUser, {
       username: worker.currentUser.username,
       lastActivityISO: null,
@@ -483,6 +566,8 @@ async function completeProcessWorker(
 
   if (jobType === "enrich") {
     const r = result as ProfileActivityResult;
+    const worker = findWorker(job, tabId);
+    if (worker) worker.apiReady = true;
     if (r.profileState === "unknown" && (currentUser.attempts ?? 0) < ENRICHMENT_UNKNOWN_RETRY_LIMIT) {
       await retryCurrentEnrichmentUser(
         job,
@@ -515,6 +600,8 @@ async function failProcessWorker(
   const note = error instanceof Error ? error.message : "Job step failed.";
 
   if (jobType === "enrich") {
+    const worker = findWorker(job, tabId);
+    if (worker) worker.apiReady = true;
     await persistActivityResult(currentUser, {
       username: currentUser.username,
       lastActivityISO: null,
@@ -627,15 +714,15 @@ async function startEnrichment(limit?: number) {
   await startJob(
     "enrich",
     queue,
-    `Opening ${Math.min(concurrency, queue.length)} helper tabs for ${queue.length} profile activity checks.`
+    `Opening ${Math.min(concurrency, queue.length)} helper tabs to bootstrap the API relay for ${queue.length} activity checks.`
   );
 
   return {
     ok: true,
     message:
       effectiveLimit >= last.users.length
-        ? `Resolving activity for all ${queue.length} accounts across ${concurrency} helper tabs.`
-        : `Resolving activity for ${queue.length} accounts across ${concurrency} helper tabs.`
+        ? `Resolving activity for all ${queue.length} accounts through ${concurrency} API relay helpers.`
+        : `Resolving activity for ${queue.length} accounts through ${concurrency} API relay helpers.`
   };
 }
 

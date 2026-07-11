@@ -124,7 +124,7 @@ function formatActivitySummary(last: LastScan) {
   if (performance?.helper) {
     const helper = performance.helper;
     lines.push(
-      `Helper fallback: ${helper.succeeded}/${helper.completed} resolved | ${helper.workers} workers | ${Math.round(
+      `API relay helpers: ${helper.succeeded}/${helper.completed} resolved | ${helper.workers} workers | ${Math.round(
         helper.profilesPerMinute
       )} profiles/min.`
     );

@@ -126,13 +126,15 @@ export interface QueuedUser {
 
 export type JobType = "enrich" | "unfollow";
 export type JobStatus = "running" | "completed" | "error" | "cancelled";
-export type JobPhase = "awaiting_navigation" | "processing";
+export type JobPhase = "awaiting_navigation" | "processing" | "api_processing";
 
 export interface JobWorkerState {
   tabId: number;
   phase: JobPhase | null;
   currentUser: QueuedUser | null;
   updatedAt: number;
+  // Once a profile page has bootstrapped X's timeline operation, keep the tab in its API relay lane.
+  apiReady?: boolean;
   note?: string | null;
 }
 

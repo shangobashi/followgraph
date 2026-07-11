@@ -1,8 +1,8 @@
 {
   "name": "followgraph",
   "private": true,
-  "version": "1.4.2-beta.1",
-  "description": "FollowGraph v1.4.2 beta: enrichment-success hardening for X/Twitter activity resolution",
+  "version": "1.5.0-beta.1",
+  "description": "FollowGraph v1.5.0 beta: API relay enrichment for X/Twitter activity resolution",
   "author": "Shango Bashi",
   "type": "module",
   "scripts": {

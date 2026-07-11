@@ -572,5 +572,6 @@ export async function isXApiFastPathAvailable() {
   if (!auth) return false;
 
   await discoverOperations();
-  return Boolean(operationByName("UserTweets") || operationByName("UserTweetsAndReplies") || operationByName("UserByScreenName"));
+  // A lookup operation alone cannot classify activity. Do not spend an entire queue on a false-positive fast path.
+  return Boolean(operationByName("UserTweets") || operationByName("UserTweetsAndReplies"));
 }

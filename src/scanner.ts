@@ -5,6 +5,7 @@ import { runApiFastPathEnrichment, type FastPathResult } from "./fastpath";
 import { getFollowingPaginationState, installFollowingApiCapture, parseFollowingApiUsers } from "./followingApi";
 import { parseVisibleUsers, processAddedNodes } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
+import { resolveProfileActivityViaXApi } from "./xapi";
 import { SCAN_MAX_IDLE_ROUNDS, decideScanIdle } from "./scanCompletion";
 import { UserStore } from "./store";
 import { runScrollLoop } from "./scroller";
@@ -674,6 +675,13 @@ function registerRuntimeListener() {
             note: error instanceof Error ? error.message : "Profile activity extraction failed."
           });
         });
+      return true;
+    }
+
+    if (msg?.action === "FOLLOWGRAPH_GET_PROFILE_ACTIVITY_API_ONLY") {
+      void resolveProfileActivityViaXApi({ username: msg.username || "", restId: msg.restId ?? null })
+        .then((result) => sendResponse(result && result.profileState !== "unknown" ? result : null))
+        .catch(() => sendResponse(null));
       return true;
     }
 
