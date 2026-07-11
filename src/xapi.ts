@@ -1,5 +1,5 @@
 import type { ProfileActivityResult } from "./types";
-import { getCapturedGraphQLOperation } from "./followingApi";
+import { getCapturedGraphQLOperation, type CapturedGraphQLOperation } from "./followingApi";
 
 const OPERATION_NAMES = ["UserByScreenName", "UserTweets", "UserTweetsAndReplies"] as const;
 
@@ -260,6 +260,33 @@ async function fetchGraphQL(auth: XApiAuthContext, operation: GraphQLOperation, 
   return (await response.json()) as GraphQLData;
 }
 
+export async function fetchFollowingPageViaXApi(
+  operation: CapturedGraphQLOperation,
+  cursor: string | null,
+  count = 100
+): Promise<unknown> {
+  const auth = await getXApiAuthContext();
+  if (!auth) throw new Error("X API authentication is unavailable.");
+
+  const variables = mergeRecord(operation.variables, {
+    cursor,
+    count: Math.max(20, Math.min(count, 100))
+  });
+
+  return fetchGraphQL(
+    auth,
+    {
+      // Following operations are captured from the live X page, so their name/query ID pair is authoritative.
+      name: operation.name as OperationName,
+      queryId: operation.queryId,
+      variables: operation.variables,
+      features: operation.features
+    },
+    variables,
+    operation.features
+  );
+}
+
 function firstStringByKey(value: unknown, keys: string[]): string | null {
   if (!value || typeof value !== "object") return null;
 
@@ -461,17 +488,26 @@ async function lookupUser(auth: XApiAuthContext, username: string): Promise<User
 }
 
 async function fetchTimeline(auth: XApiAuthContext, restId: string) {
-  const operations = [operationByName("UserTweets"), operationByName("UserTweetsAndReplies")].filter(
-    (operation): operation is GraphQLOperation => Boolean(operation)
-  );
+  const primary = operationByName("UserTweets");
+  const fallback = operationByName("UserTweetsAndReplies");
   const out: TimelineEntry[] = [];
 
-  for (const operation of operations) {
+  if (primary) {
     try {
-      const data = await fetchGraphQL(auth, operation, variablesForTimeline(operation, restId), featuresForTimeline(operation));
+      const data = await fetchGraphQL(auth, primary, variablesForTimeline(primary, restId), featuresForTimeline(primary));
+      out.push(...collectTimelineEntries(data));
+      if (latestTimelineEntry(out)) return out;
+    } catch {
+      // The fallback operation is intentionally attempted only when the primary lane cannot resolve activity.
+    }
+  }
+
+  if (fallback) {
+    try {
+      const data = await fetchGraphQL(auth, fallback, variablesForTimeline(fallback, restId), featuresForTimeline(fallback));
       out.push(...collectTimelineEntries(data));
     } catch {
-      // Try every available timeline operation; X often breaks one before the other.
+      // A profile can remain unresolved; helper-tab fallback handles the small residual queue.
     }
   }
 

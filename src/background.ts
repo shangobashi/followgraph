@@ -3,6 +3,7 @@ import type {
   JobState,
   JobType,
   JobWorkerState,
+  PerformanceTelemetry,
   ProfileActivityResult,
   QueuedUser,
   ScanSession,
@@ -15,9 +16,9 @@ import { classifyUsers, summarize } from "./activity";
 import { scanSessionBlocksJobs, scanSessionCanBeFinalized } from "./sessionRecovery";
 import { appendUnfollowAudit, loadJobState, loadLastScan, loadScanSession, saveJobState, saveLastScan, saveScanSession } from "./storage";
 
-const ENRICHMENT_DEFAULT_WORKERS = 6;
-const ENRICHMENT_MAX_WORKERS = 10;
-const ENRICHMENT_FLUSH_BATCH_SIZE = 50;
+const ENRICHMENT_DEFAULT_WORKERS = 10;
+const ENRICHMENT_MAX_WORKERS = 16;
+const ENRICHMENT_FLUSH_BATCH_SIZE = 100;
 const SCAN_SESSION_STALE_MS = 45_000;
 const ENRICHMENT_UNKNOWN_RETRY_LIMIT = 1;
 
@@ -27,6 +28,7 @@ type LastScanCache = {
   timestamp: number;
   indexByUsername: Map<string, number>;
   dirtyCount: number;
+  performance?: PerformanceTelemetry;
 };
 
 let lastScanCache: LastScanCache | null = null;
@@ -127,7 +129,7 @@ function resolveEnrichmentLimit(requestedLimit: number | undefined, totalUsers: 
 function resolveWorkerCount(type: JobType, total: number) {
   if (type === "unfollow") return Math.min(total, 1);
   if (total <= 0) return 1;
-  const preferred = total >= 1500 ? ENRICHMENT_MAX_WORKERS : ENRICHMENT_DEFAULT_WORKERS;
+  const preferred = total >= 1_500 ? ENRICHMENT_MAX_WORKERS : ENRICHMENT_DEFAULT_WORKERS;
   return clamp(Math.min(total, preferred), 1, ENRICHMENT_MAX_WORKERS);
 }
 
@@ -139,7 +141,8 @@ function buildLastScanCache(last: Awaited<ReturnType<typeof loadLastScan>>): Las
     summary: last.summary,
     timestamp: last.timestamp,
     indexByUsername: new Map(last.users.map((user, index) => [normalizeUsername(user.username), index])),
-    dirtyCount: 0
+    dirtyCount: 0,
+    performance: last.report?.performance
   };
 }
 
@@ -155,8 +158,23 @@ async function flushLastScanCache(force = false) {
   if (!force && cache.dirtyCount < ENRICHMENT_FLUSH_BATCH_SIZE) return;
 
   cache.summary = summarize(cache.users);
-  await saveLastScan(cache.users, cache.summary, cache.timestamp);
+  await saveLastScan(cache.users, cache.summary, cache.timestamp, cache.performance);
   cache.dirtyCount = 0;
+}
+
+function captureHelperTelemetry(job: JobState) {
+  if (job.type !== "enrich" || !lastScanCache) return;
+
+  lastScanCache.performance = {
+    ...lastScanCache.performance,
+    helper: {
+      completed: job.completed,
+      succeeded: job.succeeded,
+      failed: job.failed,
+      workers: job.concurrency ?? ensureWorkers(job).length,
+      profilesPerMinute: job.telemetry?.profilesPerMinute ?? 0
+    }
+  };
 }
 
 async function updateCachedUser(
@@ -223,6 +241,7 @@ async function persistJob(job: JobState | null) {
     return;
   }
 
+  captureHelperTelemetry(job);
   job.updatedAt = Date.now();
   await saveJobState(syncLegacyJobFields(job));
 }

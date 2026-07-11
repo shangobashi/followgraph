@@ -11,6 +11,11 @@ export interface CapturedGraphQLOperation {
   features: unknown;
 }
 
+export interface FollowingApiPage {
+  users: User[];
+  nextCursor: string | null;
+}
+
 interface CapturedApiResponse {
   url: string;
   body: unknown;
@@ -119,6 +124,13 @@ function rememberFollowingPagination(body: unknown) {
   followingPaginationState.uniqueUserCount = followingPaginationUsernames.size;
 }
 
+export function parseFollowingApiPage(body: unknown): FollowingApiPage {
+  return {
+    users: Array.from(collectUsers(body).values()),
+    nextCursor: findBottomCursor(body)
+  };
+}
+
 function parseJsonParam(params: URLSearchParams, key: string) {
   const value = params.get(key);
   if (!value) return null;
@@ -152,6 +164,10 @@ function rememberOperation(url: string) {
   const operation = operationFromUrl(url);
   if (!operation) return;
   capturedOperations.set(operation.name, operation);
+}
+
+function isFollowingOperation(operation: CapturedGraphQLOperation) {
+  return /following/i.test(operation.name);
 }
 
 function restIdFromRecord(record: RecordLike) {
@@ -298,6 +314,15 @@ export function installFollowingApiCapture() {
 
 export function getCapturedGraphQLOperation(name: string) {
   return capturedOperations.get(name) ?? null;
+}
+
+export function getCapturedFollowingOperation(): CapturedGraphQLOperation | null {
+  for (const operation of capturedOperations.values()) {
+    if (isFollowingOperation(operation)) return operation;
+  }
+
+  const url = currentFollowingApiUrls()[0];
+  return url ? operationFromUrl(url) : null;
 }
 
 export function getFollowingPaginationState(): FollowingPaginationState {

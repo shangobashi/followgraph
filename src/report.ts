@@ -1,4 +1,4 @@
-import type { ActivitySource, ClassifiedUser, ProfileState, ScanReport, ScanSummary } from "./types";
+import type { ActivitySource, ClassifiedUser, PerformanceTelemetry, ProfileState, ScanReport, ScanSummary } from "./types";
 
 const activitySources: ActivitySource[] = ["followingCard", "followingApi", "apiTimeline", "profileTimeline", "none"];
 const profileStates: ProfileState[] = ["posts", "noPosts", "protected", "suspended", "unavailable", "unknown"];
@@ -19,7 +19,8 @@ export function buildScanReport(
   users: ClassifiedUser[],
   summary: ScanSummary,
   timestamp = Date.now(),
-  elapsedMs: number | null = null
+  elapsedMs: number | null = null,
+  performance: PerformanceTelemetry | undefined = undefined
 ): ScanReport {
   const resolvedBySource = emptySourceCounts();
   const terminalStates = emptyStateCounts();
@@ -44,6 +45,7 @@ export function buildScanReport(
     resolvedBySource,
     terminalStates,
     elapsedMs,
-    profilesPerMinute: elapsedMinutes ? summary.Resolved / elapsedMinutes : null
+    profilesPerMinute: elapsedMinutes ? summary.Resolved / elapsedMinutes : null,
+    performance
   };
 }

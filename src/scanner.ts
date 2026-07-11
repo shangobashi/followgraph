@@ -1,6 +1,7 @@
-import type { LastScan, Progress, ScanSession, ScanSummary, StopReason } from "./types";
+import type { LastScan, PerformanceTelemetry, Progress, ScanSession, ScanSummary, StopReason } from "./types";
 import { classifyUsers, summarize } from "./activity";
-import { runApiFastPathEnrichment } from "./fastpath";
+import { runFollowingApiPagination, type FollowingPaginationTelemetry } from "./apiPagination";
+import { runApiFastPathEnrichment, type FastPathResult } from "./fastpath";
 import { getFollowingPaginationState, installFollowingApiCapture, parseFollowingApiUsers } from "./followingApi";
 import { parseVisibleUsers, processAddedNodes } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
@@ -195,6 +196,10 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   const store = new UserStore(session.users);
   let extractedTotal = 0;
   let apiHarvestRunning = false;
+  let apiPaginationStarted = false;
+  let apiPaginationComplete = false;
+  let apiPaginationTelemetry: FollowingPaginationTelemetry | null = null;
+  let fastPathTelemetry: FastPathResult["telemetry"] | null = null;
   let lastCheckpointAt = 0;
   let lastCheckpointSize = 0;
   let lastProgress: Progress | null = null;
@@ -205,6 +210,25 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
 
   function updateExtractedTotal() {
     extractedTotal = store.size();
+  }
+
+  function performanceSnapshot(scanElapsedMs = lastProgress?.elapsedMs ?? null): PerformanceTelemetry {
+    const apiResolve = fastPathTelemetry?.timings.apiResolve;
+    return {
+      scanElapsedMs,
+      apiPagination: apiPaginationTelemetry ? { ...apiPaginationTelemetry } : null,
+      fastPath: fastPathTelemetry
+        ? {
+            attempted: fastPathTelemetry.apiResolved + fastPathTelemetry.failed,
+            resolved: fastPathTelemetry.apiResolved,
+            failed: fastPathTelemetry.failed,
+            profilesPerMinute: fastPathTelemetry.profilesPerMinute,
+            rateLimited: fastPathTelemetry.rateLimited,
+            apiAverageMs: apiResolve?.avgMs ?? 0,
+            apiMaxMs: apiResolve?.maxMs ?? 0
+          }
+        : null
+    };
   }
 
   updateExtractedTotal();
@@ -235,6 +259,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
         users: values,
         summary,
         progress: lastProgress,
+        performance: performanceSnapshot(),
         updatedAt: now
       };
       await saveScanSession(nextSession);
@@ -274,13 +299,47 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     apiHarvestRunning = true;
     void parseFollowingApiUsers()
       .then((users) => {
-        if (users.length === 0) return;
-        store.add(users);
-        updateExtractedTotal();
+        if (users.length > 0) {
+          store.add(users);
+          updateExtractedTotal();
+        }
+        startApiPagination();
       })
       .catch(() => {})
       .finally(() => {
         apiHarvestRunning = false;
+      });
+  }
+
+  function startApiPagination() {
+    if (apiPaginationStarted || getFollowingPaginationState().responseCount <= 0) return;
+    apiPaginationStarted = true;
+
+    void runFollowingApiPagination({
+      onPage: (users, telemetry) => {
+        if (users.length > 0) {
+          store.add(users);
+          updateExtractedTotal();
+        }
+        apiPaginationTelemetry = telemetry;
+        void checkpoint(false);
+      },
+      onStatus: (message, telemetry) => {
+        apiPaginationTelemetry = telemetry;
+        uiSetStatus(message);
+      },
+      shouldStop: () => Boolean(window.__FOLLOWGRAPH_SCAN_ABORT__) || !isFollowingPage()
+    })
+      .then((telemetry) => {
+        apiPaginationTelemetry = telemetry;
+        if (telemetry.complete && telemetry.users > 0) {
+          apiPaginationComplete = true;
+          uiSetStatus(`API scan captured ${store.size()} profiles. Finishing scan...`);
+        }
+        void checkpoint(true);
+      })
+      .catch(() => {
+        // The DOM scroll path remains available if direct Following pagination is unavailable.
       });
   }
 
@@ -307,6 +366,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     shouldStop: () => {
       if (window.__FOLLOWGRAPH_SCAN_ABORT__) return "manualPause";
       if (!isFollowingPage()) return "tabNavigated";
+      if (apiPaginationComplete) return "idle";
       return null;
     },
     onTick: (tick) => {
@@ -428,7 +488,8 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   }
 
   await drainCheckpoints();
-  await saveLastScan(users, summary).catch(() => {});
+  const initialPerformance = performanceSnapshot(result.elapsedMs);
+  await saveLastScan(users, summary, Date.now(), initialPerformance).catch(() => {});
   await saveSessionState({
     status: "running",
     phase: "api_fast_path",
@@ -438,7 +499,8 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     stopReason: result.reason,
     error: null,
     canResume: false,
-    resumeHint: null
+    resumeHint: null,
+    performance: initialPerformance
   }).catch(() => {});
   window.__FOLLOWGRAPH_SCAN_COMPLETE__ = true;
 
@@ -471,6 +533,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   });
 
   if (fastPath && (fastPath.resolved > 0 || targetMet(fastPath.summary))) {
+    fastPathTelemetry = fastPath.telemetry;
     latestUsers = fastPath.users;
     latestSummary = fastPath.summary;
     uiSetSummary(fastPath.summary);
@@ -482,6 +545,8 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     );
 
     if (!fastPath.shouldFallback || targetMet(fastPath.summary)) {
+      const completedPerformance = performanceSnapshot(result.elapsedMs);
+      await saveLastScan(fastPath.users, fastPath.summary, Date.now(), completedPerformance).catch(() => {});
       await saveSessionState({
         status: "completed",
         phase: "completed",
@@ -491,7 +556,8 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
         stopReason: result.reason,
         error: null,
         canResume: false,
-        resumeHint: null
+        resumeHint: null,
+        performance: completedPerformance
       }).catch(() => {});
       return;
     }

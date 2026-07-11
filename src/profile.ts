@@ -157,7 +157,8 @@ export async function extractProfileActivity(
   }
 
   clickRetryButton();
-  let signal = await waitForSignal(9000);
+  // The API lane has already run before DOM fallback. Long passive waits here are the main source of multi-hour jobs.
+  let signal = await waitForSignal(2_800);
   let text = signal.text;
 
   if (text.includes("posts are protected") || text.includes("these posts are protected")) {
@@ -222,7 +223,7 @@ export async function extractProfileActivity(
 
   await nudgeTimeline();
   clickRetryButton();
-  signal = await waitForSignal(6000);
+  signal = await waitForSignal(1_800);
   text = signal.text;
   latestTime = findLatestTimelineTime();
 
