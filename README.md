@@ -1,6 +1,6 @@
 # FollowGraph
 
-A privacy-first, browser-local scanner and exporter for your own X/Twitter Following list.
+A privacy-first, browser-local scanner and exporter for your own X/Twitter Following list by IssaLabs.
 
 ## The problem
 X's Following page is infinite, virtualized, and slow. You cannot sort, filter, or export your own graph cleanly. Screenshots do not export. Manual scrolling does not scale.
@@ -9,7 +9,7 @@ X's Following page is infinite, virtualized, and slow. You cannot sort, filter, 
 - Streams accounts out of the live Following page
 - Recovers from interrupted scans using checkpoints
 - Resolves profile data from captured page API responses plus local API lanes
-- Preserves rest IDs and activity metadata
+- Presures rest IDs and activity metadata
 - Exports JSON and CSV
 - Keeps everything in your browser: no server access, no OAuth, no tracking
 
