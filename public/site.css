@@ -171,11 +171,15 @@ ol {
 }
 
 .hero {
-  padding: 56px 0 30px;
+  padding: 40px 0 34px;
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-  gap: 34px;
-  align-items: center;
+  gap: 44px;
+  align-items: start;
+}
+
+.hero-copy {
+  max-width: 41rem;
 }
 
 .eyebrow,
@@ -190,9 +194,10 @@ ol {
 .hero-title {
   margin-top: 18px;
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
-  font-size: clamp(3.4rem, 8vw, 6.6rem);
-  line-height: 0.94;
-  letter-spacing: -0.07em;
+  max-width: 13ch;
+  font-size: clamp(2.9rem, 4.75vw, 4.7rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
 }
 
 .title-line {
@@ -213,10 +218,38 @@ ol {
 
 .lede {
   max-width: 41rem;
-  margin-top: 22px;
-  font-size: clamp(1.08rem, 2.25vw, 1.28rem);
-  line-height: 1.7;
+  margin-top: 18px;
+  font-size: clamp(1.01rem, 1.48vw, 1.12rem);
+  line-height: 1.52;
   color: var(--muted);
+}
+
+.lede-secondary {
+  margin-top: 12px;
+}
+
+.hero-trust,
+.cta-note,
+.section-note {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.hero-trust {
+  max-width: 38rem;
+  margin-top: 14px;
+  color: rgba(238, 246, 255, 0.9);
+  font-weight: 700;
+}
+
+.cta-note {
+  margin-top: 0;
+  font-size: 0.94rem;
+}
+
+.section-note {
+  max-width: 58rem;
+  margin-top: 22px;
 }
 
 .actions,
@@ -225,7 +258,12 @@ ol {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  margin-top: 28px;
+  margin-top: 24px;
+}
+
+.hero-copy > .actions {
+  margin-top: 30px;
+  margin-bottom: 18px;
 }
 
 .primary,
@@ -271,7 +309,7 @@ ol {
 }
 
 .trust-row {
-  margin-top: 24px;
+  margin-top: 34px;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -307,9 +345,10 @@ ol {
 
 .hero-visual {
   position: relative;
-  min-height: 560px;
+  min-height: 540px;
   display: grid;
   place-items: center;
+  padding-top: 24px;
 }
 
 .visual-orbit {
@@ -631,6 +670,10 @@ ol {
   line-height: 1.7;
 }
 
+.panel p + p {
+  margin-top: 14px;
+}
+
 .panel-story {
   grid-column: span 6;
   min-height: 290px;
@@ -641,6 +684,10 @@ ol {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 26px;
+}
+
+.tag-row-spaced {
+  margin-top: 24px;
 }
 
 .panel-stat,
@@ -868,8 +915,9 @@ ol {
 .page-footer p {
   color: var(--subtle);
   font-size: 0.92rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  text-align: center;
 }
 
 body.modal-open {
@@ -937,7 +985,10 @@ body.modal-open {
   }
 
   .hero-title {
-    font-size: clamp(2.9rem, 16vw, 4.4rem);
+    max-width: 10ch;
+    font-size: clamp(2.55rem, 11.5vw, 3.35rem);
+    line-height: 1;
+    letter-spacing: -0.052em;
   }
 
   .actions,

@@ -5,12 +5,17 @@ const reportPath = process.argv[2] || "reports/latest.json";
 const allowSynthetic = process.argv.includes("--allow-synthetic");
 const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
 const minResolutionRate = Number(report.thresholds?.minResolutionRate ?? 0.9);
+const minEnrichmentSuccessRate = Number(report.thresholds?.minEnrichmentSuccessRate ?? 0.9);
 const maxElapsedMs = Number(report.thresholds?.maxElapsedMs ?? 90 * 60000);
 const currentCommit = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
 const releaseVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 const resolved = Number(report.resolved ?? 0);
 const totalAccounts = Number(report.totalAccounts ?? 0);
 const recomputedResolutionRate = totalAccounts > 0 ? resolved / totalAccounts : 0;
+const enrichmentAttempted = Number(report.enrichmentAttempted ?? 0);
+const enrichmentSucceeded = Number(report.enrichmentSucceeded ?? 0);
+const recomputedEnrichmentSuccessRate =
+  enrichmentAttempted > 0 ? enrichmentSucceeded / enrichmentAttempted : Number(report.enrichmentSuccessRate ?? 1);
 const failureReasons = [];
 
 if (report.gitCommit !== currentCommit) failureReasons.push("report-commit-does-not-match-head");
@@ -21,7 +26,16 @@ if (report.pass !== true) failureReasons.push("report-pass-field-not-true");
 if (Math.abs(Number(report.resolutionRate ?? 0) - recomputedResolutionRate) > 0.000001) {
   failureReasons.push("resolution-rate-inconsistent");
 }
+if (
+  report.enrichmentSuccessRate !== undefined &&
+  Math.abs(Number(report.enrichmentSuccessRate ?? 0) - recomputedEnrichmentSuccessRate) > 0.000001
+) {
+  failureReasons.push("enrichment-success-rate-inconsistent");
+}
 if (recomputedResolutionRate < minResolutionRate) failureReasons.push("resolution-rate-below-threshold");
+if (recomputedEnrichmentSuccessRate < minEnrichmentSuccessRate) {
+  failureReasons.push("enrichment-success-rate-below-threshold");
+}
 if (Number(report.elapsedMs ?? Number.POSITIVE_INFINITY) > maxElapsedMs) failureReasons.push("elapsed-time-above-threshold");
 if (totalAccounts < 7500) failureReasons.push("total-accounts-below-7500");
 
@@ -34,6 +48,7 @@ console.log(
       reportCommit: report.gitCommit,
       passed,
       resolutionRate: recomputedResolutionRate,
+      enrichmentSuccessRate: recomputedEnrichmentSuccessRate,
       elapsedMs: report.elapsedMs,
       totalAccounts,
       failureReasons

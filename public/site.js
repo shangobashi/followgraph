@@ -47,7 +47,7 @@ function initAnimations() {
       "-=0.2"
     )
     .from(".lede", { y: 28, autoAlpha: 0, duration: 0.8 }, "-=0.58")
-    .from(".actions > *", { y: 24, autoAlpha: 0, stagger: 0.12, duration: 0.65 }, "-=0.5")
+    .from(".hero-copy > .actions", { y: 18, autoAlpha: 0, duration: 0.65, clearProps: "transform" }, "-=0.5")
     .from(".trust-row span", { y: 12, autoAlpha: 0, stagger: 0.08, duration: 0.42 }, "-=0.38")
     .from(".scan-surface", { y: 36, autoAlpha: 0, rotateX: 8, duration: 1 }, "-=0.82")
     .from(".float-note", { scale: 0.88, autoAlpha: 0, stagger: 0.1, duration: 0.6 }, "-=0.58");

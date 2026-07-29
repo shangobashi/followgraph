@@ -54,6 +54,36 @@ export interface ScanReport {
   terminalStates: Record<ProfileState, number>;
   elapsedMs?: number | null;
   profilesPerMinute?: number | null;
+  performance?: PerformanceTelemetry;
+}
+
+export interface PerformanceTelemetry {
+  scanElapsedMs?: number | null;
+  apiPagination?: {
+    pages: number;
+    users: number;
+    rateLimits: number;
+    retries: number;
+    elapsedMs: number;
+    complete: boolean;
+    error: string | null;
+  } | null;
+  fastPath?: {
+    attempted: number;
+    resolved: number;
+    failed: number;
+    profilesPerMinute: number;
+    rateLimited: number;
+    apiAverageMs: number;
+    apiMaxMs: number;
+  } | null;
+  helper?: {
+    completed: number;
+    succeeded: number;
+    failed: number;
+    workers: number;
+    profilesPerMinute: number;
+  } | null;
 }
 
 export interface Progress {
@@ -83,6 +113,7 @@ export interface ScanSession {
   error?: string | null;
   canResume: boolean;
   resumeHint?: string | null;
+  performance?: PerformanceTelemetry;
 }
 
 export interface QueuedUser {
@@ -90,17 +121,20 @@ export interface QueuedUser {
   username: string;
   displayName: string;
   profileUrl: string;
+  attempts?: number;
 }
 
 export type JobType = "enrich" | "unfollow";
 export type JobStatus = "running" | "completed" | "error" | "cancelled";
-export type JobPhase = "awaiting_navigation" | "processing";
+export type JobPhase = "awaiting_navigation" | "processing" | "api_processing";
 
 export interface JobWorkerState {
   tabId: number;
   phase: JobPhase | null;
   currentUser: QueuedUser | null;
   updatedAt: number;
+  // Once a profile page has bootstrapped X's timeline operation, keep the tab in its API relay lane.
+  apiReady?: boolean;
   note?: string | null;
 }
 

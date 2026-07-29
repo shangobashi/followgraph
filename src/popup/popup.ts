@@ -103,6 +103,33 @@ function formatActivitySummary(last: LastScan) {
     lines.push("Scan now auto-starts API fast-path enrichment, with helper tabs as fallback.");
   }
 
+  const performance = report?.performance;
+  if (performance?.scanElapsedMs) {
+    lines.push(`Scan time: ${Math.round(performance.scanElapsedMs / 1000)}s`);
+  }
+  if (performance?.apiPagination) {
+    const api = performance.apiPagination;
+    lines.push(
+      `Following API: ${api.users} profiles across ${api.pages} pages${api.rateLimits ? ` | ${api.rateLimits} rate limits` : ""}.`
+    );
+  }
+  if (performance?.fastPath) {
+    const fast = performance.fastPath;
+    lines.push(
+      `Fast path: ${fast.resolved}/${fast.attempted} resolved | ${Math.round(fast.profilesPerMinute)} profiles/min${
+        fast.rateLimited ? ` | ${fast.rateLimited} rate limits` : ""
+      }.`
+    );
+  }
+  if (performance?.helper) {
+    const helper = performance.helper;
+    lines.push(
+      `API relay helpers: ${helper.succeeded}/${helper.completed} resolved | ${helper.workers} workers | ${Math.round(
+        helper.profilesPerMinute
+      )} profiles/min.`
+    );
+  }
+
   return lines.join("\n");
 }
 

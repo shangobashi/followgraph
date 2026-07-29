@@ -4,12 +4,14 @@ import { saveLastScan } from "./storage";
 import { createTelemetry, markResolved, serializeTelemetry, time } from "./telemetry";
 import { isXApiFastPathAvailable, resolveProfileActivityViaXApi } from "./xapi";
 
-const API_DEFAULT_CONCURRENCY = 48;
-const API_MIN_CONCURRENCY = 6;
-const API_MAX_CONCURRENCY = 96;
-const API_FLUSH_BATCH_SIZE = 100;
+const API_DEFAULT_CONCURRENCY = 32;
+const API_MIN_CONCURRENCY = 8;
+const API_MAX_CONCURRENCY = 64;
+const API_FLUSH_BATCH_SIZE = 250;
 const TARGET_RESOLUTION_RATE = 0.9;
-const MAX_API_ATTEMPTS = 3;
+const MAX_API_ATTEMPTS = 2;
+const RATE_LIMIT_BASE_COOLDOWN_MS = 2_000;
+const RATE_LIMIT_MAX_COOLDOWN_MS = 45_000;
 
 export interface FastPathResult {
   users: ClassifiedUser[];
@@ -148,8 +150,9 @@ export async function runApiFastPathEnrichment(
       const message = error instanceof Error ? error.message : "API fast path failed.";
       const rateLimited = message.toLowerCase().includes("rate limited") || message.includes("429");
       if (rateLimited) {
-        concurrency = clamp(Math.floor(concurrency * 0.55), API_MIN_CONCURRENCY, API_MAX_CONCURRENCY);
-        rateLimitCooldownUntil = Date.now() + 15000 * Math.max(item.attempts + 1, 1);
+        concurrency = clamp(Math.floor(concurrency * 0.65), API_MIN_CONCURRENCY, API_MAX_CONCURRENCY);
+        const cooldownMs = Math.min(RATE_LIMIT_MAX_COOLDOWN_MS, RATE_LIMIT_BASE_COOLDOWN_MS * 2 ** item.attempts);
+        rateLimitCooldownUntil = Math.max(rateLimitCooldownUntil, Date.now() + cooldownMs);
         markResolved(telemetry, "rateLimited", completed + 1);
         if (item.attempts + 1 < MAX_API_ATTEMPTS) {
           workQueue.push({ index, attempts: item.attempts + 1 });
@@ -177,8 +180,8 @@ export async function runApiFastPathEnrichment(
       completed += 1;
       dirty += 1;
 
-      if (completed > 0 && completed % 250 === 0 && failed / completed < 0.08) {
-        concurrency = clamp(concurrency + 8, API_MIN_CONCURRENCY, API_MAX_CONCURRENCY);
+      if (completed > 0 && completed % 400 === 0 && failed / completed < 0.05) {
+        concurrency = clamp(concurrency + 4, API_MIN_CONCURRENCY, API_MAX_CONCURRENCY);
       }
 
       await flush(false);

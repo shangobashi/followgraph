@@ -1,4 +1,4 @@
-import type { ClassifiedUser, JobState, LastScan, ScanSession, ScanSummary, UnfollowAuditEntry } from "./types";
+import type { ClassifiedUser, JobState, LastScan, PerformanceTelemetry, ScanSession, ScanSummary, UnfollowAuditEntry } from "./types";
 import { buildScanReport } from "./report";
 
 export const LAST_SCAN_KEY = "followgraph:lastScan";
@@ -6,12 +6,19 @@ export const JOB_KEY = "followgraph:job";
 export const AUDIT_KEY = "followgraph:unfollowAudit";
 export const SCAN_SESSION_KEY = "followgraph:scanSession";
 
-export async function saveLastScan(users: ClassifiedUser[], summary: ScanSummary, timestamp = Date.now()) {
+export async function saveLastScan(
+  users: ClassifiedUser[],
+  summary: ScanSummary,
+  timestamp = Date.now(),
+  performance: PerformanceTelemetry | undefined = undefined
+) {
+  const existing = await chrome.storage.local.get(LAST_SCAN_KEY);
+  const previous = existing[LAST_SCAN_KEY] as LastScan | undefined;
   const payload: LastScan = {
     timestamp,
     users,
     summary,
-    report: buildScanReport(users, summary, timestamp)
+    report: buildScanReport(users, summary, timestamp, performance?.scanElapsedMs ?? null, performance ?? previous?.report?.performance)
   };
   await chrome.storage.local.set({ [LAST_SCAN_KEY]: payload });
 }

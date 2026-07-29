@@ -1,4 +1,5 @@
 import type { ProfileActivityResult, UnfollowResult } from "./types";
+import { installFollowingApiCapture, parseCapturedApiUsers } from "./followingApi";
 import { resolveProfileActivityViaXApi } from "./xapi";
 
 function sleep(ms: number) {
@@ -19,34 +20,56 @@ function pageText() {
   return cleanText(document.body?.textContent).toLowerCase();
 }
 
+interface ProfileSignal {
+  text: string;
+  hasTimelineTime: boolean;
+  hasTerminalState: boolean;
+}
+
 function currentUsername(fallback = "") {
   return location.pathname.split("/").filter(Boolean)[0] || fallback;
+}
+
+function normalizeUsername(username: string) {
+  return username.replace(/^@/, "").trim().toLowerCase();
 }
 
 function hasTerminalProfileState(text: string) {
   return (
     text.includes("posts are protected") ||
+    text.includes("these posts are protected") ||
     text.includes("account suspended") ||
     text.includes("hasn't posted") ||
     text.includes("no posts yet") ||
     text.includes("when they do, their posts will show up here") ||
-    text.includes("this account doesn't exist")
+    text.includes("this account doesn't exist") ||
+    text.includes("this account doesn") ||
+    text.includes("profile is unavailable")
   );
+}
+
+function readProfileSignal(): ProfileSignal {
+  const hasTimelineTime = Boolean(document.querySelector("article time[datetime]"));
+  const text = pageText();
+  return {
+    text,
+    hasTimelineTime,
+    hasTerminalState: hasTerminalProfileState(text)
+  };
 }
 
 async function waitForSignal(timeoutMs = 1800) {
   const startedAt = Date.now();
+  let signal = readProfileSignal();
 
   while (Date.now() - startedAt < timeoutMs) {
-    if (document.querySelector("article time[datetime]")) return;
-
-    const text = pageText();
-    if (hasTerminalProfileState(text)) {
-      return;
-    }
+    if (signal.hasTimelineTime || signal.hasTerminalState) return signal;
 
     await sleep(80);
+    signal = readProfileSignal();
   }
+
+  return signal;
 }
 
 function findLatestTimelineTime() {
@@ -67,6 +90,38 @@ function findButton(matcher: (text: string) => boolean) {
   return candidates.find((candidate) => isVisible(candidate) && matcher(cleanText(candidate.textContent)));
 }
 
+function clickRetryButton() {
+  const retry = findButton((text) => {
+    const label = text.toLowerCase();
+    return label === "retry" || label === "try again" || label.includes("retry") || label.includes("try again");
+  });
+  retry?.click();
+  return Boolean(retry);
+}
+
+async function nudgeTimeline() {
+  window.scrollBy({ top: 900, left: 0, behavior: "instant" as ScrollBehavior });
+  await sleep(250);
+  window.scrollBy({ top: -650, left: 0, behavior: "instant" as ScrollBehavior });
+}
+
+async function resolveFromCapturedProfile(username: string): Promise<ProfileActivityResult | null> {
+  const key = normalizeUsername(username);
+  const users = await parseCapturedApiUsers().catch(() => []);
+  const user = users.find((candidate) => normalizeUsername(candidate.username) === key);
+  if (!user) return null;
+  if (!user.lastActivityISO && (!user.profileState || user.profileState === "unknown")) return null;
+
+  return {
+    restId: user.restId ?? null,
+    username: user.username || username,
+    lastActivityISO: user.lastActivityISO,
+    activitySource: user.activitySource ?? (user.lastActivityISO ? "followingApi" : "none"),
+    profileState: user.profileState ?? (user.lastActivityISO ? "posts" : "unknown"),
+    note: user.note ?? "Resolved from captured X profile API response."
+  };
+}
+
 async function waitFor<T>(factory: () => T | null | undefined, timeoutMs = 5000) {
   const startedAt = Date.now();
 
@@ -83,6 +138,9 @@ export async function extractProfileActivity(
   expected?: string | { username: string; restId?: string | null }
 ): Promise<ProfileActivityResult> {
   const expectedUsername = typeof expected === "string" ? expected : expected?.username;
+  installFollowingApiCapture();
+  await sleep(200);
+
   const apiInput =
     typeof expected === "string"
       ? expected || currentUsername("")
@@ -92,12 +150,18 @@ export async function extractProfileActivity(
     return apiResult;
   }
 
-  await waitForSignal();
-
   const username = currentUsername(expectedUsername || "");
-  let text = pageText();
+  const capturedResult = await resolveFromCapturedProfile(username);
+  if (capturedResult && capturedResult.profileState !== "unknown") {
+    return capturedResult;
+  }
 
-  if (text.includes("posts are protected")) {
+  clickRetryButton();
+  // The API lane has already run before DOM fallback. Long passive waits here are the main source of multi-hour jobs.
+  let signal = await waitForSignal(2_800);
+  let text = signal.text;
+
+  if (text.includes("posts are protected") || text.includes("these posts are protected")) {
     return {
       username,
       lastActivityISO: null,
@@ -117,7 +181,7 @@ export async function extractProfileActivity(
     };
   }
 
-  if (text.includes("this account doesn't exist")) {
+  if (text.includes("this account doesn't exist") || text.includes("this account doesn") || text.includes("profile is unavailable")) {
     return {
       username,
       lastActivityISO: null,
@@ -152,12 +216,18 @@ export async function extractProfileActivity(
     };
   }
 
-  // Give slower profiles one shorter second pass without reverting to the old 12s ceiling.
-  await waitForSignal(1800);
-  text = pageText();
+  const capturedAfterWait = await resolveFromCapturedProfile(username);
+  if (capturedAfterWait && capturedAfterWait.profileState !== "unknown") {
+    return capturedAfterWait;
+  }
+
+  await nudgeTimeline();
+  clickRetryButton();
+  signal = await waitForSignal(1_800);
+  text = signal.text;
   latestTime = findLatestTimelineTime();
 
-  if (text.includes("posts are protected")) {
+  if (text.includes("posts are protected") || text.includes("these posts are protected")) {
     return {
       username,
       lastActivityISO: null,
@@ -177,7 +247,7 @@ export async function extractProfileActivity(
     };
   }
 
-  if (text.includes("this account doesn't exist")) {
+  if (text.includes("this account doesn't exist") || text.includes("this account doesn") || text.includes("profile is unavailable")) {
     return {
       username,
       lastActivityISO: null,
@@ -209,6 +279,11 @@ export async function extractProfileActivity(
       profileState: "noPosts",
       note: "No public posts found."
     };
+  }
+
+  const finalCapturedResult = await resolveFromCapturedProfile(username);
+  if (finalCapturedResult && finalCapturedResult.profileState !== "unknown") {
+    return finalCapturedResult;
   }
 
   return {

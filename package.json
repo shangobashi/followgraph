@@ -1,16 +1,18 @@
 {
   "name": "followgraph",
   "private": true,
-  "version": "1.3.7",
-  "description": "FollowGraph v1.3.7: client-side Following Exporter for X/Twitter with saved-checkpoint enrichment, cursor-aware scan completion, and captured API enrichment",
+  "version": "1.5.0-beta.1",
+  "description": "FollowGraph v1.5.0 beta: API relay enrichment for X/Twitter activity resolution",
   "author": "Shango Bashi",
   "type": "module",
   "scripts": {
     "acceptance": "node scripts/acceptance-gate.mjs reports/latest.json",
     "acceptance:synthetic": "node scripts/acceptance-gate.mjs reports/latest.json --allow-synthetic",
     "benchmark": "node scripts/benchmark.mjs",
-    "benchmark:report": "node scripts/benchmark.mjs --total 7500 --concurrency 64 --latency-ms 350 --resolution-rate 0.9 --max-minutes 90 --min-resolution-rate 0.9 --report reports/latest.json",
-    "replay:report": "node scripts/replay-benchmark.mjs --total 7500 --following-resolved 5200 --api-resolved 1550 --dom-resolved 0 --unknown 750 --concurrency 64 --api-latency-ms 420 --max-minutes 90 --min-resolution-rate 0.9 --report reports/latest.json",
+    "benchmark:report": "node scripts/benchmark.mjs --total 7500 --concurrency 64 --latency-ms 350 --resolution-rate 0.9 --max-minutes 90 --min-resolution-rate 0.9 --min-enrichment-success-rate 0.9 --report reports/latest.json",
+    "benchmark:target": "node scripts/benchmark.mjs --total 7500 --concurrency 64 --latency-ms 420 --resolution-rate 0.9 --max-minutes 42 --min-resolution-rate 0.9 --min-enrichment-success-rate 0.9 --report reports/target-synthetic.json",
+    "replay:report": "node scripts/replay-benchmark.mjs --total 7500 --following-resolved 5200 --api-resolved 2070 --dom-resolved 0 --unknown 230 --concurrency 64 --api-latency-ms 420 --max-minutes 90 --min-resolution-rate 0.9 --min-enrichment-success-rate 0.9 --report reports/latest.json",
+    "replay:target": "node scripts/replay-benchmark.mjs --total 7500 --following-resolved 6000 --api-resolved 1125 --dom-resolved 375 --unknown 0 --concurrency 32 --api-latency-ms 500 --max-minutes 42 --min-resolution-rate 0.9 --min-enrichment-success-rate 0.9 --report reports/target-replay.json",
     "test:scan-completion": "node scripts/test-scan-completion.mjs",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch"

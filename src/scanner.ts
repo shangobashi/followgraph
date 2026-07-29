@@ -1,9 +1,11 @@
-import type { LastScan, Progress, ScanSession, ScanSummary, StopReason } from "./types";
+import type { LastScan, PerformanceTelemetry, Progress, ScanSession, ScanSummary, StopReason } from "./types";
 import { classifyUsers, summarize } from "./activity";
-import { runApiFastPathEnrichment } from "./fastpath";
+import { runFollowingApiPagination, type FollowingPaginationTelemetry } from "./apiPagination";
+import { runApiFastPathEnrichment, type FastPathResult } from "./fastpath";
 import { getFollowingPaginationState, installFollowingApiCapture, parseFollowingApiUsers } from "./followingApi";
-import { parseVisibleUsers } from "./parser";
+import { parseVisibleUsers, processAddedNodes } from "./parser";
 import { extractProfileActivity, unfollowCurrentProfile } from "./profile";
+import { resolveProfileActivityViaXApi } from "./xapi";
 import { SCAN_MAX_IDLE_ROUNDS, decideScanIdle } from "./scanCompletion";
 import { UserStore } from "./store";
 import { runScrollLoop } from "./scroller";
@@ -25,6 +27,8 @@ const SCAN_CHECKPOINT_USER_DELTA = 250;
 const SCAN_CHECKPOINT_INTERVAL_MS = 3000;
 const X_LOAD_RETRY_LIMIT = 3;
 const X_LOAD_RETRY_INTERVAL_MS = 5000;
+const FULL_PARSE_FALLBACK_EVERY_ROUNDS = 25;
+const UI_PROGRESS_INTERVAL_MS = 500;
 
 function isFollowingPage(): boolean {
   const hostOk = ["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(location.hostname);
@@ -193,15 +197,39 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   const store = new UserStore(session.users);
   let extractedTotal = 0;
   let apiHarvestRunning = false;
+  let apiPaginationStarted = false;
+  let apiPaginationComplete = false;
+  let apiPaginationTelemetry: FollowingPaginationTelemetry | null = null;
+  let fastPathTelemetry: FastPathResult["telemetry"] | null = null;
   let lastCheckpointAt = 0;
   let lastCheckpointSize = 0;
   let lastProgress: Progress | null = null;
+  let lastUiProgressAt = 0;
   let xLoadRetries = 0;
   let lastXLoadRetryAt = 0;
   let checkpointChain: Promise<void> = Promise.resolve();
 
   function updateExtractedTotal() {
     extractedTotal = store.size();
+  }
+
+  function performanceSnapshot(scanElapsedMs = lastProgress?.elapsedMs ?? null): PerformanceTelemetry {
+    const apiResolve = fastPathTelemetry?.timings.apiResolve;
+    return {
+      scanElapsedMs,
+      apiPagination: apiPaginationTelemetry ? { ...apiPaginationTelemetry } : null,
+      fastPath: fastPathTelemetry
+        ? {
+            attempted: fastPathTelemetry.apiResolved + fastPathTelemetry.failed,
+            resolved: fastPathTelemetry.apiResolved,
+            failed: fastPathTelemetry.failed,
+            profilesPerMinute: fastPathTelemetry.profilesPerMinute,
+            rateLimited: fastPathTelemetry.rateLimited,
+            apiAverageMs: apiResolve?.avgMs ?? 0,
+            apiMaxMs: apiResolve?.maxMs ?? 0
+          }
+        : null
+    };
   }
 
   updateExtractedTotal();
@@ -232,6 +260,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
         users: values,
         summary,
         progress: lastProgress,
+        performance: performanceSnapshot(),
         updatedAt: now
       };
       await saveScanSession(nextSession);
@@ -271,9 +300,11 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     apiHarvestRunning = true;
     void parseFollowingApiUsers()
       .then((users) => {
-        if (users.length === 0) return;
-        store.add(users);
-        updateExtractedTotal();
+        if (users.length > 0) {
+          store.add(users);
+          updateExtractedTotal();
+        }
+        startApiPagination();
       })
       .catch(() => {})
       .finally(() => {
@@ -281,19 +312,68 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
       });
   }
 
+  function startApiPagination() {
+    if (apiPaginationStarted || getFollowingPaginationState().responseCount <= 0) return;
+    apiPaginationStarted = true;
+
+    void runFollowingApiPagination({
+      onPage: (users, telemetry) => {
+        if (users.length > 0) {
+          store.add(users);
+          updateExtractedTotal();
+        }
+        apiPaginationTelemetry = telemetry;
+        void checkpoint(false);
+      },
+      onStatus: (message, telemetry) => {
+        apiPaginationTelemetry = telemetry;
+        uiSetStatus(message);
+      },
+      shouldStop: () => Boolean(window.__FOLLOWGRAPH_SCAN_ABORT__) || !isFollowingPage()
+    })
+      .then((telemetry) => {
+        apiPaginationTelemetry = telemetry;
+        if (telemetry.complete && telemetry.users > 0) {
+          apiPaginationComplete = true;
+          uiSetStatus(`API scan captured ${store.size()} profiles. Finishing scan...`);
+        }
+        void checkpoint(true);
+      })
+      .catch(() => {
+        // The DOM scroll path remains available if direct Following pagination is unavailable.
+      });
+  }
+
+  function ingestVisibleUsers() {
+    const changed = store.add(parseVisibleUsers());
+    if (changed > 0) updateExtractedTotal();
+    return changed;
+  }
+
+  function ingestAddedNodes(nodes: Iterable<Node>) {
+    const parsed = processAddedNodes(nodes, (user) => {
+      store.addOne(user);
+    });
+    if (parsed > 0) updateExtractedTotal();
+    return parsed;
+  }
+
+  ingestVisibleUsers();
   await checkpoint(true);
 
   const result = await runScrollLoop({
     maxIdleRounds: SCAN_MAX_IDLE_ROUNDS,
+    onNodesAdded: ingestAddedNodes,
     shouldStop: () => {
       if (window.__FOLLOWGRAPH_SCAN_ABORT__) return "manualPause";
       if (!isFollowingPage()) return "tabNavigated";
+      if (apiPaginationComplete) return "idle";
       return null;
     },
     onTick: (tick) => {
-      const visible = parseVisibleUsers();
-      store.add(visible);
-      updateExtractedTotal();
+      if (extractedTotal === 0 || tick.rounds % FULL_PARSE_FALLBACK_EVERY_ROUNDS === 0 || (!tick.progressed && tick.idleRounds === 1)) {
+        ingestVisibleUsers();
+      }
       harvestApiUsers();
 
       const progress: Progress = {
@@ -302,7 +382,11 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
       };
 
       lastProgress = progress;
-      uiUpdateProgress(progress);
+      const now = performance.now();
+      if (now - lastUiProgressAt >= UI_PROGRESS_INTERVAL_MS || !tick.progressed) {
+        uiUpdateProgress(progress);
+        lastUiProgressAt = now;
+      }
       const issue = detectXLoadIssue();
       if (issue) {
         const now = Date.now();
@@ -405,7 +489,8 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   }
 
   await drainCheckpoints();
-  await saveLastScan(users, summary).catch(() => {});
+  const initialPerformance = performanceSnapshot(result.elapsedMs);
+  await saveLastScan(users, summary, Date.now(), initialPerformance).catch(() => {});
   await saveSessionState({
     status: "running",
     phase: "api_fast_path",
@@ -415,7 +500,8 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     stopReason: result.reason,
     error: null,
     canResume: false,
-    resumeHint: null
+    resumeHint: null,
+    performance: initialPerformance
   }).catch(() => {});
   window.__FOLLOWGRAPH_SCAN_COMPLETE__ = true;
 
@@ -448,6 +534,7 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
   });
 
   if (fastPath && (fastPath.resolved > 0 || targetMet(fastPath.summary))) {
+    fastPathTelemetry = fastPath.telemetry;
     latestUsers = fastPath.users;
     latestSummary = fastPath.summary;
     uiSetSummary(fastPath.summary);
@@ -459,6 +546,8 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
     );
 
     if (!fastPath.shouldFallback || targetMet(fastPath.summary)) {
+      const completedPerformance = performanceSnapshot(result.elapsedMs);
+      await saveLastScan(fastPath.users, fastPath.summary, Date.now(), completedPerformance).catch(() => {});
       await saveSessionState({
         status: "completed",
         phase: "completed",
@@ -468,7 +557,8 @@ async function runScan(mode: "start" | "resume", tabId: number | null) {
         stopReason: result.reason,
         error: null,
         canResume: false,
-        resumeHint: null
+        resumeHint: null,
+        performance: completedPerformance
       }).catch(() => {});
       return;
     }
@@ -585,6 +675,13 @@ function registerRuntimeListener() {
             note: error instanceof Error ? error.message : "Profile activity extraction failed."
           });
         });
+      return true;
+    }
+
+    if (msg?.action === "FOLLOWGRAPH_GET_PROFILE_ACTIVITY_API_ONLY") {
+      void resolveProfileActivityViaXApi({ username: msg.username || "", restId: msg.restId ?? null })
+        .then((result) => sendResponse(result && result.profileState !== "unknown" ? result : null))
+        .catch(() => sendResponse(null));
       return true;
     }
 

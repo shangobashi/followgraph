@@ -11,6 +11,11 @@ export interface CapturedGraphQLOperation {
   features: unknown;
 }
 
+export interface FollowingApiPage {
+  users: User[];
+  nextCursor: string | null;
+}
+
 interface CapturedApiResponse {
   url: string;
   body: unknown;
@@ -119,6 +124,13 @@ function rememberFollowingPagination(body: unknown) {
   followingPaginationState.uniqueUserCount = followingPaginationUsernames.size;
 }
 
+export function parseFollowingApiPage(body: unknown): FollowingApiPage {
+  return {
+    users: Array.from(collectUsers(body).values()),
+    nextCursor: findBottomCursor(body)
+  };
+}
+
 function parseJsonParam(params: URLSearchParams, key: string) {
   const value = params.get(key);
   if (!value) return null;
@@ -152,6 +164,10 @@ function rememberOperation(url: string) {
   const operation = operationFromUrl(url);
   if (!operation) return;
   capturedOperations.set(operation.name, operation);
+}
+
+function isFollowingOperation(operation: CapturedGraphQLOperation) {
+  return /following/i.test(operation.name);
 }
 
 function restIdFromRecord(record: RecordLike) {
@@ -251,6 +267,22 @@ function currentFollowingApiUrls() {
   return pending;
 }
 
+function currentGraphQLApiUrls() {
+  const pending = performance
+    .getEntriesByType("resource")
+    .map((entry) => entry.name)
+    .filter(isXGraphQLUrl)
+    .filter((url) => !seenUrls.has(url))
+    .slice(-24);
+
+  for (const url of pending) {
+    seenUrls.add(url);
+    rememberOperation(url);
+  }
+
+  return pending;
+}
+
 function rememberCapturedResponse(payload: CapturedApiResponse) {
   if (!payload.url || !isXGraphQLUrl(payload.url)) return;
   rememberOperation(payload.url);
@@ -284,6 +316,15 @@ export function getCapturedGraphQLOperation(name: string) {
   return capturedOperations.get(name) ?? null;
 }
 
+export function getCapturedFollowingOperation(): CapturedGraphQLOperation | null {
+  for (const operation of capturedOperations.values()) {
+    if (isFollowingOperation(operation)) return operation;
+  }
+
+  const url = currentFollowingApiUrls()[0];
+  return url ? operationFromUrl(url) : null;
+}
+
 export function getFollowingPaginationState(): FollowingPaginationState {
   return { ...followingPaginationState };
 }
@@ -306,6 +347,30 @@ export async function parseFollowingApiUsers(): Promise<User[]> {
         collectUsers(body, users);
       } catch {
         // Replay can fail for internal API responses; page-world capture remains the primary path.
+      }
+    })
+  );
+
+  return Array.from(users.values());
+}
+
+export async function parseCapturedApiUsers(): Promise<User[]> {
+  const users = new Map<string, User>();
+
+  for (const payload of capturedResponses.splice(0, capturedResponses.length)) {
+    if (isXGraphQLUrl(payload.url)) collectUsers(payload.body, users);
+  }
+
+  const urls = currentGraphQLApiUrls();
+  await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const response = await fetch(url, { credentials: "include" });
+        if (!response.ok) return;
+        const body = await response.json();
+        collectUsers(body, users);
+      } catch {
+        // Some internal API URLs are not replayable; page-world capture remains the primary path.
       }
     })
   );

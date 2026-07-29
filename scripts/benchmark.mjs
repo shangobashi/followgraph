@@ -10,6 +10,7 @@ function readArgs(argv) {
     resolutionRate: 0.9,
     maxMinutes: 90,
     minResolutionRate: 0.9,
+    minEnrichmentSuccessRate: 0.9,
     report: ""
   };
 
@@ -30,6 +31,7 @@ function readArgs(argv) {
     else if (key === "resolution-rate") out.resolutionRate = Number.parseFloat(value);
     else if (key === "max-minutes") out.maxMinutes = Number.parseFloat(value);
     else if (key === "min-resolution-rate") out.minResolutionRate = Number.parseFloat(value);
+    else if (key === "min-enrichment-success-rate") out.minEnrichmentSuccessRate = Number.parseFloat(value);
     else if (key === "report") out.report = value;
   }
 
@@ -93,10 +95,12 @@ async function main() {
 
   const elapsedMs = performance.now() - startedMs;
   const resolutionRate = completed / total;
+  const enrichmentSuccessRate = completed / Math.max(resolvedTarget, 1);
   const profilesPerMinute = completed / Math.max(elapsedMs / 60000, 1 / 60);
   const maxElapsedMs = opts.maxMinutes * 60000;
   const failureReasons = [];
   if (resolutionRate < opts.minResolutionRate) failureReasons.push("resolution-rate-below-threshold");
+  if (enrichmentSuccessRate < opts.minEnrichmentSuccessRate) failureReasons.push("enrichment-success-rate-below-threshold");
   if (elapsedMs > maxElapsedMs) failureReasons.push("elapsed-time-above-threshold");
 
   const report = {
@@ -109,6 +113,10 @@ async function main() {
     totalAccounts: total,
     attempted: resolvedTarget,
     resolved: completed,
+    enrichmentAttempted: resolvedTarget,
+    enrichmentSucceeded: completed,
+    enrichmentFailed: resolvedTarget - completed,
+    enrichmentSuccessRate,
     apiResolved: completed,
     domResolved: 0,
     failed: total - completed,
@@ -131,6 +139,7 @@ async function main() {
     },
     thresholds: {
       minResolutionRate: opts.minResolutionRate,
+      minEnrichmentSuccessRate: opts.minEnrichmentSuccessRate,
       maxElapsedMs
     },
     pass: failureReasons.length === 0,
